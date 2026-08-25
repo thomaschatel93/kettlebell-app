@@ -1911,9 +1911,22 @@ git add -A && git commit -m "fix: stop the round rest leaking across block bound
 - Produces: `GenerateInput`, `generate(input): Workout`
 
 The whole engine behind one pure function. The fitting strategy is the corrected
-one from spec 4.5: build the ancillary blocks first, measure what they cost, give
-the main block the true remainder, then search rounds and item counts together and
-rank on pattern coverage before time.
+one from spec 4.5: build the ancillary blocks first, then search rounds and item
+counts together and rank on pattern coverage before time.
+
+> **CORRECTION, applied before implementation on 2026-08-25.** An earlier version of
+> this task scored each candidate on `blockSeconds(mainPlan)` against a target derived
+> as `total - blockSeconds(warm) - blockSeconds(cool)`. That is a parallel arithmetic
+> that drifts from what `buildSteps` actually emits: the two agree exactly within one
+> block, but across three blocks they differ by the sum of the boundary item rests,
+> measured at 45 seconds on a realistic plan, always running LONG.
+>
+> Maintaining a second way to compute the same number is precisely the class of bug
+> that made the original engine miss its budget by up to 57%. So the search now costs
+> the WHOLE workout by calling `buildSteps` on the full three-block candidate and
+> summing `estSeconds` — the same number the returned `Workout` reports. The search
+> space is at most 5 counts times 12 rounds, so the cost is negligible and the
+> estimate is correct by construction rather than by agreement.
 
 `shortOfBudget` is an honest escape hatch. A 60-minute complex genuinely cannot be
 filled by any sane number of rounds of a three-move chain. Rather than lie, the
@@ -2187,9 +2200,18 @@ interface Candidate { plan: BlockPlan; coverage: number; dev: number }
 const better = (a: Candidate, b: Candidate | null): boolean =>
   b === null || a.coverage > b.coverage || (a.coverage === b.coverage && a.dev < b.dev);
 
+/**
+ * The true cost of a whole workout: what buildSteps will actually emit, summed.
+ * Never sum blockSeconds across blocks — that misses the boundary rests and always
+ * reads short.
+ */
+const wholeWorkoutSeconds = (plans: BlockPlan[]): number =>
+  buildSteps(plans).reduce((a, s) => a + s.estSeconds, 0);
+
 function buildMain(
   format: Format, pool: Exercise[], combos: Combo[], req: WorkoutRequest, kit: KitProfile,
   history: HistoryEntry[], target: number, seed: number,
+  cost: (plan: BlockPlan) => number,
 ): { plan: BlockPlan; format: Format } {
   const search = SEARCH[format];
   const between = betweenRoundsRest(format, req.effort);
@@ -2224,7 +2246,8 @@ function buildMain(
 
     for (const rounds of search.rounds) {
       const plan: BlockPlan = { block: 'Main', rounds, betweenRoundsRest: between, items };
-      const candidate: Candidate = { plan, coverage, dev: deviation(blockSeconds(plan), target) };
+      // Cost the WHOLE workout, not this block in isolation.
+      const candidate: Candidate = { plan, coverage, dev: deviation(cost(plan), target) };
       if (better(candidate, best)) best = candidate;
       if (rd * rounds > target * 1.5) break;   // no point searching further out
     }
@@ -2233,10 +2256,18 @@ function buildMain(
   if (!best) {
     return format === 'circuit'
       ? { plan: { block: 'Main', rounds: 1, betweenRoundsRest: between, items: [] }, format }
-      : buildMain('circuit', pool, combos, req, kit, history, target, seed);
+      : buildMain('circuit', pool, combos, req, kit, history, target, seed, cost);
   }
 
-  return { plan: trimToBudget(best.plan, target), format };
+  // Trim on the between-rounds rest, then keep the trim only if it actually helped.
+  // trimToBudget rounds to five seconds before clamping, so it can overshoot; and it
+  // solves for the main block alone, which is not quite the whole-workout target.
+  const trimmed = trimToBudget(best.plan, target - (cost(best.plan) - blockSeconds(best.plan)));
+  const chosen = deviation(cost(trimmed), target) < deviation(cost(best.plan), target)
+    ? trimmed
+    : best.plan;
+
+  return { plan: chosen, format };
 }
 
 const mainIdsOf = (plan: BlockPlan) => [...new Set(plan.items.map((i) => i.exercise.id))].sort();
@@ -2251,19 +2282,21 @@ export function generate(input: GenerateInput): Workout {
     warmupPool(exercises, kit), kit, 'Warm-up', nominal.warmupSeconds, 15, request.effort, request.seed + 101);
   const cool = buildAncillary(
     cooldownPool(exercises, kit), kit, 'Cool-down', nominal.cooldownSeconds, 10, request.effort, request.seed + 202);
-  const mainTarget = total - blockSeconds(warm) - blockSeconds(cool);
 
   const pool = filterPool(exercises, request, kit);
   const usableCombos = filterCombos(combos, exercises, request, kit);
   const wanted = chooseFormat(request, usableCombos.length > 0);
 
+  // Every candidate is costed as the whole workout it would produce.
+  const cost = (plan: BlockPlan) => wholeWorkoutSeconds([warm, plan, cool]);
+
   let seed = request.seed;
-  let built = buildMain(wanted, pool, usableCombos, request, kit, history, mainTarget, seed);
+  let built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
 
   const previous = history[0] ? [...history[0].mainExerciseIds].sort() : null;
   for (let i = 0; i < 5 && previous && mainIdsOf(built.plan).join() === previous.join(); i++) {
     seed += 1;
-    built = buildMain(wanted, pool, usableCombos, request, kit, history, mainTarget, seed);
+    built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
   }
 
   const steps = buildSteps([warm, built.plan, cool]);
