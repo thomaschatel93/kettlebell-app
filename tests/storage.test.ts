@@ -6,16 +6,33 @@ import {
 import type { ActiveState, Prefs } from '@/lib/storage';
 import { uniqueWeights, resolveBell } from '@/lib/kit';
 import type { KitState } from '@/lib/kit';
+import { historyWeight } from '@/lib/select';
 import { entry, req } from './fixtures';
-import type { HistoryEntry, Workout } from '@/lib/types';
+import type { HistoryEntry, Step, Workout } from '@/lib/types';
+
+// A resumable/replayable workout needs a real steps array - both ActiveState
+// (Finding 11) and HistoryEntry (Finding 12's audit pass) are rejected by the
+// storage layer without one, so every fixture workout in this file carries a
+// few placeholder steps rather than the empty array a pure round-trip test
+// would otherwise reach for.
+const dummyStep: Step = {
+  kind: 'work', exerciseId: 'x', name: 'X', bellKg: null,
+  block: 'Main', round: 1, totalRounds: 1, indexInRound: 0, itemsInRound: 1, estSeconds: 10,
+};
 
 const workout = { id: 'w', createdAt: 'now', request: req(), format: 'circuit',
-  steps: [], estimatedSeconds: 0, loadWarning: false, shortOfBudget: false } as Workout;
+  steps: [dummyStep, dummyStep, dummyStep, dummyStep],
+  estimatedSeconds: 0, loadWarning: false, shortOfBudget: false } as Workout;
 
 const activeFixture = (over: Partial<Parameters<typeof saveActive>[0]> = {}) => ({
   v: 1 as const, workout, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null,
   ...over,
 });
+
+// entry() alone defaults to `workout: {}` (no steps), which the storage layer
+// now rejects (Finding 12's audit pass applied hasStepsArray to HistoryEntry
+// too). Tests in this file that need a keepable entry go through this instead.
+const historyEntry = (over: Partial<HistoryEntry> = {}) => entry({ workout, ...over });
 
 const STORAGE_KEYS = {
   kits: 'kb.kits.v1', history: 'kb.history.v1', prefs: 'kb.prefs.v1', active: 'kb.active.v1',
@@ -147,24 +164,24 @@ describe('history', () => {
   it('starts empty', () => expect(loadHistory()).toEqual([]));
 
   it('puts the newest entry first', () => {
-    pushHistory(entry({ id: 'one' }));
-    pushHistory(entry({ id: 'two' }));
+    pushHistory(historyEntry({ id: 'one' }));
+    pushHistory(historyEntry({ id: 'two' }));
     expect(loadHistory().map((h) => h.id)).toEqual(['two', 'one']);
   });
 
   it('keeps only the last thirty', () => {
-    for (let i = 0; i < 35; i++) pushHistory(entry({ id: `e${i}` }));
+    for (let i = 0; i < 35; i++) pushHistory(historyEntry({ id: `e${i}` }));
     expect(loadHistory()).toHaveLength(30);
     expect(loadHistory()[0].id).toBe('e34');
   });
 
   it('keeps the whole workout, not a summary', () => {
-    pushHistory(entry({ id: 'w1', workout }));
+    pushHistory(historyEntry({ id: 'w1' }));
     expect(loadHistory()[0].workout.format).toBe('circuit');
   });
 
   it('stores history behind a version envelope, not a bare array', () => {
-    pushHistory(entry({ id: 'x' }));
+    pushHistory(historyEntry({ id: 'x' }));
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS.history)!);
     expect(raw.v).toBe(1);
     expect(Array.isArray(raw.entries)).toBe(true);
@@ -177,9 +194,68 @@ describe('history', () => {
 
   it('filters out non-entry garbage from stored history rather than crashing downstream', () => {
     localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
-      v: 1, entries: [null, 5, { nope: 1 }, entry({ id: 'ok' })],
+      v: 1, entries: [null, 5, { nope: 1 }, historyEntry({ id: 'ok' })],
     }));
     expect(loadHistory().map((h) => h.id)).toEqual(['ok']);
+  });
+
+  it('rejects a history entry whose workout has no steps array, same crash class as an active state', () => {
+    // The audit pass in Finding 12's fix round found this is the exact same
+    // gap Finding 11 closed for ActiveState.workout - just not yet exercised
+    // by any *current* consumer, since no history detail screen exists yet.
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'no-steps' }), workout: {} }, historyEntry({ id: 'fine' })],
+    }));
+    expect(loadHistory().map((h) => h.id)).toEqual(['fine']);
+  });
+
+  it('coerces a null mainExerciseIds to [] rather than dropping the entry or crashing the engine', () => {
+    // generate.ts spreads history[0].mainExerciseIds and historyWeight
+    // .flatMap()s the same field across every entry - both crash one frame
+    // after a bare read that "succeeded".
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'x' }), mainExerciseIds: null }],
+    }));
+    const h = loadHistory();
+    expect(h).toHaveLength(1);
+    expect(h[0].mainExerciseIds).toEqual([]);
+    expect(() => [...h[0].mainExerciseIds]).not.toThrow();
+    expect(() => historyWeight('anything', h)).not.toThrow();
+  });
+
+  it('coerces a string mainExerciseIds (instead of an array) to []', () => {
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'x' }), mainExerciseIds: 'not-an-array' }],
+    }));
+    expect(loadHistory()[0].mainExerciseIds).toEqual([]);
+  });
+
+  it('filters non-string elements out of a garbage mainExerciseIds array', () => {
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'x' }), mainExerciseIds: ['a', null, 7, 'b'] }],
+    }));
+    expect(loadHistory()[0].mainExerciseIds).toEqual(['a', 'b']);
+  });
+
+  it('coerces a non-numeric workedSeconds to 0 rather than dropping the entry', () => {
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'x' }), workedSeconds: 'lots' }],
+    }));
+    expect(loadHistory()[0].workedSeconds).toBe(0);
+  });
+
+  it('coerces a non-finite workedSeconds (Infinity via a JSON exponent literal) to 0', () => {
+    const e = historyEntry({ id: 'x' });
+    const raw = `{"v":1,"entries":[${JSON.stringify(e).replace('"workedSeconds":1500', '"workedSeconds":1e999')}]}`;
+    localStorage.setItem(STORAGE_KEYS.history, raw);
+    expect(loadHistory()[0].workedSeconds).toBe(0);
+  });
+
+  it('drops an entry with no usable createdAt, since the history screen sorts and displays by it', () => {
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify({
+      v: 1, entries: [{ ...historyEntry({ id: 'no-date' }), createdAt: 42 }, historyEntry({ id: 'fine' })],
+    }));
+    expect(loadHistory().map((h) => h.id)).toEqual(['fine']);
   });
 });
 
@@ -284,6 +360,25 @@ describe('active workout', () => {
     localStorage.setItem(STORAGE_KEYS.active, raw);
     expect(loadActive()).toBeNull();
   });
+
+  it('rejects a stepIndex out of range for its own workout.steps (would read undefined.kind on resume)', () => {
+    // The audit pass in Finding 12's fix round: workout.steps is now
+    // guaranteed to be an array, but a stepIndex a real workout couldn't
+    // produce (truncated on write, corrupted separately from workout) still
+    // crashes the runner the same way one line further in.
+    saveActive(activeFixture({ stepIndex: workout.steps.length }));
+    expect(loadActive()).toBeNull();
+  });
+
+  it('rejects a negative stepIndex', () => {
+    saveActive(activeFixture({ stepIndex: -1 }));
+    expect(loadActive()).toBeNull();
+  });
+
+  it('accepts a stepIndex that is the last valid index into workout.steps', () => {
+    saveActive(activeFixture({ stepIndex: workout.steps.length - 1 }));
+    expect(loadActive()?.stepIndex).toBe(workout.steps.length - 1);
+  });
 });
 
 describe('storage keys', () => {
@@ -367,8 +462,17 @@ describe('hostile input sweep', () => {
     {
       name: 'history', key: STORAGE_KEYS.history, load: loadHistory,
       isValidDefault: (v) => Array.isArray(v),
+      // Mirrors the two real engine consumers: generate.ts spreads
+      // history[0].mainExerciseIds, and historyWeight .flatMap()s the same
+      // field across the first two entries (Finding 12's crash sites).
       use: (v) => {
-        (v as HistoryEntry[]).slice(0, 2).forEach((e) => { void e.mainExerciseIds; });
+        const history = v as HistoryEntry[];
+        history.slice(0, 2).forEach((e) => { void e.mainExerciseIds; });
+        historyWeight('anything', history);
+        // Mirrors generate.ts's `history[0] ? [...history[0].mainExerciseIds] : null`
+        // exactly - mainExerciseIds itself is spread with no extra `?? []` guard,
+        // since the loader's job is to guarantee it's always an array.
+        if (history[0]) void [...history[0].mainExerciseIds];
       },
     },
     {

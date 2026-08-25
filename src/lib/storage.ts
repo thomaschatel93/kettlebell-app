@@ -32,6 +32,17 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
 }
 
 /**
+ * `isPlainObject(workout)` alone accepts `workout: {}`. Both the resumed
+ * workout screen (mounts on `ActiveState`) and a future history detail screen
+ * (reads a `HistoryEntry`) index into `workout.steps` unguarded the instant
+ * they render, so a truncated/half-written workout must be rejected here, not
+ * discovered there - the worst possible moment to first notice a corrupt value.
+ */
+function hasStepsArray(x: unknown): x is { steps: unknown[] } {
+  return isPlainObject(x) && Array.isArray(x.steps);
+}
+
+/**
  * Reads never throw. A corrupt value on a phone with no console must not brick
  * the app. `JSON.parse('null')` succeeds and returns `null` without throwing, so
  * every caller below re-validates the *shape* of what comes back, not just
@@ -107,14 +118,42 @@ export function loadKits(): KitState {
 }
 export const saveKits = (state: KitState): boolean => write(KEYS.kits, { ...state, v: VERSION });
 
-function isHistoryEntryLike(x: unknown): x is HistoryEntry {
-  return isPlainObject(x) && typeof x.id === 'string';
+/**
+ * The minimum an entry needs to be worth keeping at all. `id` identifies it;
+ * `createdAt` is what the history screen sorts and displays by, so an entry
+ * without a usable one of those is better dropped than shown out of order or
+ * unlabelled.
+ */
+function hasKeepableHistoryShape(
+  x: unknown,
+): x is Record<string, unknown> & { id: string; createdAt: string; workout: { steps: unknown[] } } {
+  return isPlainObject(x) && typeof x.id === 'string' && typeof x.createdAt === 'string' && hasStepsArray(x.workout);
+}
+
+/**
+ * `isHistoryEntryLike` (the old shape check) only verified `id`. A stored
+ * `mainExerciseIds: null`, or a string instead of an array, passed it cleanly
+ * and then crashed one frame later - `generate.ts` spreads `history[0].mainExerciseIds`
+ * and `historyWeight` `.flatMap`s the same field across every entry. Neither
+ * `mainExerciseIds` nor `workedSeconds` is essential to *identifying* the
+ * entry the way `id`/`createdAt` are, so a malformed value here is coerced to
+ * a safe default rather than discarding a record that may still be worth
+ * keeping for the history screen.
+ */
+function sanitizeHistoryEntry(x: Record<string, unknown> & { id: string; createdAt: string }): HistoryEntry {
+  const mainExerciseIds = Array.isArray(x.mainExerciseIds)
+    ? x.mainExerciseIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const workedSeconds = typeof x.workedSeconds === 'number' && Number.isFinite(x.workedSeconds)
+    ? x.workedSeconds
+    : 0;
+  return { ...(x as unknown as HistoryEntry), mainExerciseIds, workedSeconds };
 }
 
 export function loadHistory(): HistoryEntry[] {
   const raw = readRaw(KEYS.history);
   if (!isPlainObject(raw) || raw.v !== VERSION || !Array.isArray(raw.entries)) return [];
-  return raw.entries.filter(isHistoryEntryLike);
+  return raw.entries.filter(hasKeepableHistoryShape).map(sanitizeHistoryEntry);
 }
 export const pushHistory = (e: HistoryEntry): boolean =>
   write(KEYS.history, { v: VERSION, entries: [e, ...loadHistory()].slice(0, MAX_HISTORY) });
@@ -147,24 +186,20 @@ function isFiniteOrNull(x: unknown): x is number | null {
   return x === null || (typeof x === 'number' && Number.isFinite(x));
 }
 
-/**
- * `isPlainObject(x.workout)` alone accepts `workout: {}`. The workout screen
- * reads `workout.steps` unguarded the instant it mounts on resume, so a
- * truncated/half-written active state must be rejected here, not discovered
- * there - the worst possible moment to first notice a corrupt value.
- */
-function isResumableWorkout(x: unknown): x is { steps: unknown[] } {
-  return isPlainObject(x) && Array.isArray(x.steps);
-}
-
 function isActiveState(x: unknown): x is ActiveState {
-  return isPlainObject(x)
+  if (!(isPlainObject(x)
     && x.v === VERSION
-    && isResumableWorkout(x.workout)
+    && hasStepsArray(x.workout)
     && typeof x.stepIndex === 'number' && Number.isFinite(x.stepIndex)
     && typeof x.workedSeconds === 'number' && Number.isFinite(x.workedSeconds)
     && isFiniteOrNull(x.restEndsAt)
-    && isFiniteOrNull(x.pausedRemainingMs);
+    && isFiniteOrNull(x.pausedRemainingMs))) return false;
+
+  // A stepIndex a real workout couldn't produce (out of range, e.g. from a
+  // workout that got truncated on write, or corrupted to fewer steps) would
+  // crash the runner the same way: `workout.steps[stepIndex].kind` reads off
+  // `undefined` the instant the screen renders the current step.
+  return x.stepIndex >= 0 && x.stepIndex < x.workout.steps.length;
 }
 
 export function loadActive(): ActiveState | null {
