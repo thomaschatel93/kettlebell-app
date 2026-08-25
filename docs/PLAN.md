@@ -1208,7 +1208,31 @@ git add -A && git commit -m "feat: prescribe reps and rest from effort, with the
 `orderCircuit` is a full rewrite. The previous single-pass fix-up left an adjacent
 duplicate in 15% of cases that had a valid ordering, destroyed the ballistic-first
 ordering in 35%, and ignored the wrap-around entirely, where a circuit's last item
-meets its first on the next round. The replacement is a largest-remaining-group
+meets its first on the next round.
+
+> **CORRECTION, applied during implementation on 2026-08-25.** The replacement first
+> written below was ALSO wrong, in two ways, both confirmed by three independent
+> brute-force checks:
+>
+> 1. **The closing rotation cannot repair a wrap clash.** Rotation is a symmetry of a
+>    cycle, so it preserves every circular adjacency. It only moves the clashing pair
+>    into the interior, and in doing so destroys the no-adjacent-duplicates invariant
+>    the greedy had just established. Verified: every rotation of `[A,B,A,C,A]` has a
+>    broken interior.
+> 2. **The `solvable` predicate in the test used `Math.ceil(n/2)`,** which is the bound
+>    for arranging a line. The bound for arranging a CIRCLE is `Math.floor(n/2)`. Over
+>    1,715 multisets, `floor` mispredicts 0 and `ceil` mispredicts 330. The test was
+>    asserting circular validity on cases that were arithmetically impossible.
+>
+> The shipped `src/lib/select.ts` therefore keeps the largest-remaining-group greedy as
+> `greedyOrder`, a safe fallback complete for a LINE, and adds `searchOrder`: the same
+> greedy made complete for the CIRCLE by backtracking, with memoised dead states and
+> only the first unused item of each pattern group tried. It was verified exhaustively
+> against brute force — 11,976 solvable cases up to n=12, zero wrong, zero dropped —
+> and runs in under 2ms worst case. Read the shipped file, not the block below, if the
+> two ever disagree.
+
+The replacement is a largest-remaining-group
 greedy, which is complete whenever a valid ordering exists.
 
 The weighting is deliberately arithmetic. A fresh candidate scores in `[0.5, 1.5)`
@@ -1237,11 +1261,16 @@ const adjacentOk = (out: Exercise[], wrap: boolean): boolean => {
   return true;
 };
 
-/** A set admits an ordering when no single pattern holds more than half the slots. */
+/**
+ * A set admits a CIRCULAR ordering when no single pattern holds more than
+ * floor(n/2) of the slots. Do not use ceil here: ceil is the bound for arranging a
+ * line, and a circuit is a circle. Brute-forced over 1,715 multisets, floor
+ * mispredicts 0 and ceil mispredicts 330.
+ */
 const solvable = (items: Exercise[]): boolean => {
   const counts = new Map<Pattern, number>();
   for (const e of items) counts.set(e.patterns[0], (counts.get(e.patterns[0]) ?? 0) + 1);
-  return Math.max(...counts.values()) <= Math.ceil(items.length / 2);
+  return Math.max(...counts.values()) <= Math.floor(items.length / 2);
 };
 
 describe('historyWeight', () => {
