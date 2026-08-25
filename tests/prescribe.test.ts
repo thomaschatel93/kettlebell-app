@@ -40,6 +40,29 @@ describe('prescribe', () => {
     // A heavy ballistic is unaffected: the one bell is the right bell for a swing.
     expect(prescribe(swing, 'circuit', 'normal', oneBell).reps).toBe(10);
   });
+
+  it('does not penalise a bodyweight (bells: 0) exercise even when the kit is under-specified', () => {
+    const oneBell = kit({ bells: [{ weightKg: 24, count: 1 }] });
+    const bodyweightReps = ex('warmup-reps', { bells: 0, loadBand: 'light' });
+    const bodyweightSeconds = ex('warmup-seconds', {
+      bells: 0, loadBand: 'light', mechanic: 'carry',
+      defaultReps: undefined, defaultWorkSeconds: 40, secondsPerRep: 0,
+    });
+    // Unpenalised: 8 default reps, factor 1. If the bells > 0 clause were dropped,
+    // the 0.6 kit penalty would apply and this would come out to 5.
+    expect(prescribe(bodyweightReps, 'circuit', 'normal', oneBell).reps).toBe(8);
+    // Unpenalised: 40 default seconds, factor 1. Dropping the clause would cut it to 25.
+    expect(prescribe(bodyweightSeconds, 'circuit', 'normal', oneBell).seconds).toBe(40);
+  });
+
+  it('floors a very short carry at fifteen seconds', () => {
+    const tinyCarry = ex('tiny-carry', {
+      mechanic: 'carry', defaultReps: undefined, defaultWorkSeconds: 10, secondsPerRep: 0,
+    });
+    // 10s * 0.7 (easy) = 7 -> toFive = 5, which is below the floor. Without the
+    // Math.max(15, ...) floor this would assert 5, not 15.
+    expect(prescribe(tinyCarry, 'circuit', 'easy', FULL_KIT).seconds).toBe(15);
+  });
 });
 
 describe('estimateWork', () => {
