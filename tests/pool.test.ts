@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { filterPool, coverablePatterns, warmupPool } from '@/lib/pool';
-import { ex, req, kit, FIXTURE_EXERCISES, HOME_KIT, FULL_KIT } from './fixtures';
+import { filterPool, filterCombos, coverablePatterns, warmupPool, cooldownPool } from '@/lib/pool';
+import {
+  ex, req, kit, combo, FIXTURE_EXERCISES, FIXTURE_COMBOS, HOME_KIT, FULL_KIT,
+} from './fixtures';
 
 describe('filterPool', () => {
   it('drops exercises above the requested capability', () => {
@@ -50,6 +52,42 @@ describe('coverablePatterns', () => {
   it('is empty for an empty pool', () => {
     expect(coverablePatterns([], req())).toEqual([]);
   });
+
+  it('drops a requested pattern the pool cannot train', () => {
+    const pool = [ex('h', { patterns: ['hinge'] })];
+    const covered = coverablePatterns(pool, req({ patterns: ['hinge', 'carry'] }));
+    expect(covered).toEqual(['hinge']);
+    expect(covered).not.toContain('carry');
+  });
+});
+
+describe('filterCombos', () => {
+  it('rejects a combo above the requested capability', () => {
+    const c = combo('adv', { capability: 'advanced' });
+    expect(filterCombos([c], FIXTURE_EXERCISES, req({ capability: 'beginner' }), kit())).toEqual([]);
+  });
+
+  it('rejects a two-bell combo when the kit has no matched pair', () => {
+    const c = combo('double', { bells: 2 });
+    expect(filterCombos([c], FIXTURE_EXERCISES, req(), kit())).toEqual([]);
+  });
+
+  it('rejects a combo whose member exercise ids do not all resolve', () => {
+    const c = combo('missing', { steps: [{ exerciseId: 'nonexistent', reps: 3 }] });
+    expect(filterCombos([c], FIXTURE_EXERCISES, req(), kit())).toEqual([]);
+  });
+
+  it('rejects a combo whose members are not all supported by the kit', () => {
+    const c = combo('needs-bench', {
+      steps: [{ exerciseId: 'f-split-squat', reps: 3 }, { exerciseId: 'f-press', reps: 3 }],
+    });
+    expect(filterCombos([c], FIXTURE_EXERCISES, req(), kit({ hasBench: false }))).toEqual([]);
+  });
+
+  it('accepts a combo that satisfies everything', () => {
+    const result = filterCombos(FIXTURE_COMBOS, FIXTURE_EXERCISES, req(), kit());
+    expect(result).toContainEqual(expect.objectContaining({ id: 'f-combo-a' }));
+  });
 });
 
 describe('warmupPool', () => {
@@ -57,5 +95,18 @@ describe('warmupPool', () => {
     const pool = warmupPool(FIXTURE_EXERCISES, HOME_KIT);
     expect(pool.length).toBeGreaterThan(0);
     for (const e of pool) expect(e.warmupSuitable).toBe(true);
+  });
+
+  it('keeps a bodyweight warm-up move even when the kit has no bells', () => {
+    const move = ex('bw-warm', { bells: 0, warmupSuitable: true });
+    expect(warmupPool([move], kit({ bells: [] }))).toEqual([move]);
+  });
+});
+
+describe('cooldownPool', () => {
+  it('returns only cool-down moves', () => {
+    const pool = cooldownPool(FIXTURE_EXERCISES, HOME_KIT);
+    expect(pool.length).toBeGreaterThan(0);
+    for (const e of pool) expect(e.cooldownSuitable).toBe(true);
   });
 });

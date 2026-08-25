@@ -42,4 +42,9 @@ describe('chooseFormat', () => {
   it('falls back to a circuit when no combo fits', () => {
     expect(chooseFormat(req({ patterns: ['push'], totalMinutes: 30 }), false)).toBe('circuit');
   });
+
+  it('checks the four-or-more-patterns rule before the long-session rule', () => {
+    const r = req({ patterns: ['hinge', 'squat', 'push', 'pull'], totalMinutes: 45 });
+    expect(chooseFormat(r, true)).toBe('circuit');
+  });
 });
