@@ -28,4 +28,18 @@ describe('fixture database', () => {
   it('gives every exercise a way to be prescribed', () => {
     for (const e of FIXTURE_EXERCISES) expect(e.defaultReps ?? e.defaultWorkSeconds).toBeDefined();
   });
+
+  it('prescribes every exercise in reps xor seconds, never both, never neither', () => {
+    for (const e of FIXTURE_EXERCISES) {
+      const byReps = e.defaultReps !== undefined && e.defaultWorkSeconds === undefined;
+      const bySeconds = e.defaultWorkSeconds !== undefined && e.defaultReps === undefined;
+      expect(byReps || bySeconds, e.id).toBe(true);
+    }
+  });
+
+  it('never flags an exercise as both warm-up and cool-down suitable', () => {
+    for (const e of FIXTURE_EXERCISES) {
+      expect(e.warmupSuitable && e.cooldownSuitable, e.id).toBe(false);
+    }
+  });
 });
