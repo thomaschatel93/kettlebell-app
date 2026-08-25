@@ -2347,6 +2347,30 @@ review live here: `activeId` is validated against the profiles that exist, prefs
 are validated rather than spread over defaults, and every stored value carries a
 version inside it so a shape change is discarded rather than crashing the runner.
 
+> **CORRECTION, applied during implementation on 2026-08-25.** The code below was
+> wrong in three CRITICAL ways and several smaller ones. Read the shipped
+> `src/lib/storage.ts`, not this block.
+>
+> 1. **`JSON.parse('null')` succeeds and returns `null`,** defeating the `{}` fallback
+>    in `read`. A stored literal `null` made `loadKits` and `loadPrefs` throw — exactly
+>    the bricking this module exists to prevent.
+> 2. **A `null` entry inside the profiles array threw** on `.some((p) => p.id === ...)`.
+> 3. **`loadKits` returned `DEFAULT_KIT_STATE` by reference.** The plan's own round-trip
+>    test permanently poisoned the shared default for the life of the process.
+>
+> The deeper lesson, which cost two further fix rounds: **a read that does not throw is
+> not enough. What it RETURNS must be safe to use.** Corrupt `bells` elements, a
+> `workout` with no `steps` array, a `mainExerciseIds` of `null`, and a `stepIndex` past
+> the end of the workout all survived the read and then crashed one frame later, in
+> `uniqueWeights`, in the runner, and in the generator's spread. The shipped module
+> sanitises what it hands back, and its tests sweep in two stages: the loaders must not
+> throw, and neither must the code that uses what they returned.
+>
+> Also environmental: Node 25 ships a `localStorage` global that shadows jsdom's inside
+> Vitest workers, because vitest's `getWindowKeys` gates on `k in global` and
+> `localStorage` is absent from its hard-coded key list. `tests/setup.ts` delegates to
+> jsdom's real `Storage` rather than hand-rolling one.
+
 - [ ] **Step 1: Write the failing test**
 
 `tests/storage.test.ts`:
