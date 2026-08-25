@@ -18,7 +18,11 @@ export function resolveBell(band: LoadBand, kit: KitProfile): number | null {
   return w[Math.floor((w.length - 1) / 2)];
 }
 
-export const hasMatchedPair = (kit: KitProfile): boolean => kit.bells.some((b) => b.count >= 2);
+export function hasMatchedPair(kit: KitProfile): boolean {
+  const totals = new Map<number, number>();
+  for (const b of kit.bells) totals.set(b.weightKg, (totals.get(b.weightKg) ?? 0) + b.count);
+  return [...totals.values()].some((count) => count >= 2);
+}
 
 /**
  * Fewer than three distinct weights means light, moderate and heavy collapse onto

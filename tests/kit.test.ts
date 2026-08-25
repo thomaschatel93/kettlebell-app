@@ -43,6 +43,10 @@ describe('hasMatchedPair', () => {
     expect(hasMatchedPair(kit([{ weightKg: 16, count: 2 }]))).toBe(true);
     expect(hasMatchedPair(kit([{ weightKg: 16, count: 1 }, { weightKg: 24, count: 1 }]))).toBe(false);
   });
+
+  it('is true when two separate count:1 entries share a weight', () => {
+    expect(hasMatchedPair(kit([{ weightKg: 16, count: 1 }, { weightKg: 16, count: 1 }]))).toBe(true);
+  });
 });
 
 describe('isUnderSpecified', () => {
@@ -64,5 +68,16 @@ describe('DEFAULT_KIT_STATE', () => {
 
   it('starts at the lowest capability', () => {
     expect(DEFAULT_KIT_STATE.capability).toBe('beginner');
+  });
+
+  it('carries the storage schema version', () => {
+    expect(DEFAULT_KIT_STATE.v).toBe(1);
+  });
+
+  it('gives Gym a bench and Home none', () => {
+    const home = DEFAULT_KIT_STATE.profiles.find((p) => p.id === 'home');
+    const gym = DEFAULT_KIT_STATE.profiles.find((p) => p.id === 'gym');
+    expect(home?.hasBench).toBe(false);
+    expect(gym?.hasBench).toBe(true);
   });
 });
