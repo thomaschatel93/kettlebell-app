@@ -60,8 +60,25 @@ function write(key: string, value: unknown): boolean {
 
 const DEFAULT_PREFS: Prefs = { patterns: ['hinge', 'squat', 'push'], effort: 'normal', totalMinutes: 30 };
 
+function isValidBell(x: unknown): x is { weightKg: number; count: number } {
+  return isPlainObject(x)
+    && typeof x.weightKg === 'number' && Number.isFinite(x.weightKg) && x.weightKg > 0
+    && typeof x.count === 'number' && Number.isFinite(x.count) && Number.isInteger(x.count) && x.count >= 0;
+}
+
 function isKitProfile(x: unknown): x is KitProfile {
   return isPlainObject(x) && (x.id === 'home' || x.id === 'gym') && Array.isArray(x.bells);
+}
+
+/**
+ * `isKitProfile` only checks that `bells` is an array, not what's inside it. A
+ * `null`/garbage element there doesn't crash `loadKits` itself, but crashes the
+ * very next frame - `uniqueWeights`/`resolveBell` read `.weightKg`/`.count` off
+ * every element unguarded. Drop anything that isn't a real bell rather than
+ * carry rubbish one step further downstream.
+ */
+function sanitizeKitProfile(p: KitProfile): KitProfile {
+  return { ...p, bells: p.bells.filter(isValidBell) };
 }
 
 export function loadKits(): KitState {
@@ -70,7 +87,9 @@ export function loadKits(): KitState {
 
   // A null/garbage entry inside `profiles` would crash both the `.some()` below
   // and every downstream `profiles.find(...)`. Filter before touching either.
-  const profiles = (Array.isArray(raw.profiles) ? raw.profiles : []).filter(isKitProfile);
+  const profiles = (Array.isArray(raw.profiles) ? raw.profiles : [])
+    .filter(isKitProfile)
+    .map(sanitizeKitProfile);
   if (profiles.length === 0) return structuredClone(DEFAULT_KIT_STATE);
 
   // A stored activeId naming no existing profile would crash every downstream
@@ -128,12 +147,22 @@ function isFiniteOrNull(x: unknown): x is number | null {
   return x === null || (typeof x === 'number' && Number.isFinite(x));
 }
 
+/**
+ * `isPlainObject(x.workout)` alone accepts `workout: {}`. The workout screen
+ * reads `workout.steps` unguarded the instant it mounts on resume, so a
+ * truncated/half-written active state must be rejected here, not discovered
+ * there - the worst possible moment to first notice a corrupt value.
+ */
+function isResumableWorkout(x: unknown): x is { steps: unknown[] } {
+  return isPlainObject(x) && Array.isArray(x.steps);
+}
+
 function isActiveState(x: unknown): x is ActiveState {
   return isPlainObject(x)
     && x.v === VERSION
-    && isPlainObject(x.workout)
-    && typeof x.stepIndex === 'number'
-    && typeof x.workedSeconds === 'number'
+    && isResumableWorkout(x.workout)
+    && typeof x.stepIndex === 'number' && Number.isFinite(x.stepIndex)
+    && typeof x.workedSeconds === 'number' && Number.isFinite(x.workedSeconds)
     && isFiniteOrNull(x.restEndsAt)
     && isFiniteOrNull(x.pausedRemainingMs);
 }

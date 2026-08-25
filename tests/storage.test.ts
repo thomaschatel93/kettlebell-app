@@ -3,8 +3,11 @@ import {
   loadKits, saveKits, loadHistory, pushHistory, loadPrefs, savePrefs,
   loadActive, saveActive, clearActive,
 } from '@/lib/storage';
+import type { ActiveState, Prefs } from '@/lib/storage';
+import { uniqueWeights, resolveBell } from '@/lib/kit';
+import type { KitState } from '@/lib/kit';
 import { entry, req } from './fixtures';
-import type { Workout } from '@/lib/types';
+import type { HistoryEntry, Workout } from '@/lib/types';
 
 const workout = { id: 'w', createdAt: 'now', request: req(), format: 'circuit',
   steps: [], estimatedSeconds: 0, loadWarning: false, shortOfBudget: false } as Workout;
@@ -97,6 +100,46 @@ describe('kits', () => {
     const b = loadKits();
     expect(b.profiles[0].bells).toEqual([]);
     expect(b.capability).toBe('beginner');
+  });
+
+  it('drops a null bells element rather than crashing the very next frame', () => {
+    // isKitProfile only checks that bells is an array. A garbage element
+    // inside it doesn't crash loadKits - it crashes uniqueWeights/resolveBell
+    // one frame later, the moment anything actually uses the kit.
+    localStorage.setItem(STORAGE_KEYS.kits, JSON.stringify({
+      v: 1,
+      profiles: [{ id: 'home', name: 'Home', bells: [null], hasBench: false }],
+      activeId: 'home',
+      capability: 'beginner',
+    }));
+    const home = loadKits().profiles.find((p) => p.id === 'home')!;
+    expect(home.bells).toEqual([]);
+    expect(() => uniqueWeights(home)).not.toThrow();
+    expect(() => resolveBell('moderate', home)).not.toThrow();
+  });
+
+  it('keeps only structurally valid bells, dropping garbage weights/counts', () => {
+    localStorage.setItem(STORAGE_KEYS.kits, JSON.stringify({
+      v: 1,
+      profiles: [{
+        id: 'home',
+        name: 'Home',
+        bells: [
+          { weightKg: 16, count: 2 },
+          null,
+          { weightKg: -5, count: 1 },        // non-positive weight
+          { weightKg: 16, count: 1.5 },      // non-integer count
+          { weightKg: 'heavy', count: 1 },   // wrong type
+          { weightKg: 24, count: -1 },       // negative count
+          'nope',
+        ],
+        hasBench: false,
+      }],
+      activeId: 'home',
+      capability: 'beginner',
+    }));
+    const home = loadKits().profiles.find((p) => p.id === 'home')!;
+    expect(home.bells).toEqual([{ weightKg: 16, count: 2 }]);
   });
 });
 
@@ -216,6 +259,31 @@ describe('active workout', () => {
     expect(() => clearActive()).not.toThrow();
     spy.mockRestore();
   });
+
+  it('rejects a resumed workout with no steps array (would crash the runner on mount)', () => {
+    localStorage.setItem(STORAGE_KEYS.active, JSON.stringify({
+      v: 1, workout: {}, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null,
+    }));
+    expect(loadActive()).toBeNull();
+  });
+
+  it('rejects a non-finite stepIndex smuggled in via a JSON exponent literal', () => {
+    // JSON has no Infinity/NaN literal, but "1e999" is valid JSON number
+    // syntax that overflows a double to Infinity once parsed - this is a
+    // real way a non-finite value reaches JSON.parse without JSON.stringify
+    // ever being able to produce it.
+    const raw = `{"v":1,"workout":${JSON.stringify(workout)},"stepIndex":1e999,`
+      + '"workedSeconds":0,"restEndsAt":null,"pausedRemainingMs":null}';
+    localStorage.setItem(STORAGE_KEYS.active, raw);
+    expect(loadActive()).toBeNull();
+  });
+
+  it('rejects a non-finite workedSeconds smuggled in via a JSON exponent literal', () => {
+    const raw = `{"v":1,"workout":${JSON.stringify(workout)},"stepIndex":0,`
+      + '"workedSeconds":1e999,"restEndsAt":null,"pausedRemainingMs":null}';
+    localStorage.setItem(STORAGE_KEYS.active, raw);
+    expect(loadActive()).toBeNull();
+  });
 });
 
 describe('storage keys', () => {
@@ -270,45 +338,84 @@ describe('hostile input sweep', () => {
     JSON.stringify({ v: 1, a: { b: { c: [null, { d: 'e' }] } } }),  // deeply nested rubbish
   ];
 
+  // Stage 1 proves the loader itself doesn't throw. Stage 2 goes one level
+  // deeper and USES the returned value the way the real app does - reading
+  // `.steps.length` off a resumed workout, resolving a bell off a kit
+  // profile, reading fields off a history entry. A read that survives but
+  // hands back a value the app then crashes on is not actually safe.
   const cases: {
     name: string;
     key: string;
     load: () => unknown;
     isValidDefault: (v: unknown) => boolean;
+    use: (v: unknown) => void;
   }[] = [
     {
       name: 'kits', key: STORAGE_KEYS.kits, load: loadKits,
       isValidDefault: (v) => Array.isArray((v as { profiles: unknown[] }).profiles),
+      use: (v) => {
+        const state = v as KitState;
+        const active = state.profiles.find((p) => p.id === state.activeId);
+        if (active) {
+          uniqueWeights(active);
+          resolveBell('light', active);
+          resolveBell('moderate', active);
+          resolveBell('heavy', active);
+        }
+      },
     },
     {
       name: 'history', key: STORAGE_KEYS.history, load: loadHistory,
       isValidDefault: (v) => Array.isArray(v),
+      use: (v) => {
+        (v as HistoryEntry[]).slice(0, 2).forEach((e) => { void e.mainExerciseIds; });
+      },
     },
     {
       name: 'prefs', key: STORAGE_KEYS.prefs, load: loadPrefs,
       isValidDefault: (v) => Array.isArray((v as { patterns: unknown[] }).patterns)
         && (v as { patterns: unknown[] }).patterns.length > 0,
+      use: (v) => {
+        const prefs = v as Prefs;
+        void prefs.patterns.length;
+        void prefs.effort;
+        void prefs.totalMinutes;
+      },
     },
     {
       name: 'active', key: STORAGE_KEYS.active, load: loadActive,
       isValidDefault: (v) => v === null || typeof v === 'object',
+      use: (v) => {
+        const active = v as ActiveState | null;
+        if (active) void active.workout.steps.length;
+      },
     },
   ];
 
-  let sweepCount = 0;
-  for (const { name, key, load, isValidDefault } of cases) {
+  let stage1Count = 0;
+  let stage2Count = 0;
+  for (const { name, key, load, isValidDefault, use } of cases) {
     for (const payload of hostilePayloads) {
-      sweepCount += 1;
+      stage1Count += 1;
+      stage2Count += 1;
       it(`${name} loader never throws and returns a valid default for: ${payload}`, () => {
         localStorage.setItem(key, payload);
         let result: unknown;
         expect(() => { result = load(); }).not.toThrow();
         expect(isValidDefault(result)).toBe(true);
       });
+
+      it(`${name} loader's result survives real app usage (stage 2) for: ${payload}`, () => {
+        localStorage.setItem(key, payload);
+        const result = load();
+        expect(() => use(result)).not.toThrow();
+      });
     }
   }
 
-  it(`swept ${hostilePayloads.length} hostile payloads across ${cases.length} loaders`, () => {
-    expect(sweepCount).toBe(hostilePayloads.length * cases.length);
+  it(`swept ${hostilePayloads.length} hostile payloads across ${cases.length} loaders `
+    + `(${stage1Count} stage-1 no-throw cases, ${stage2Count} stage-2 real-usage cases)`, () => {
+    expect(stage1Count).toBe(hostilePayloads.length * cases.length);
+    expect(stage2Count).toBe(hostilePayloads.length * cases.length);
   });
 });
