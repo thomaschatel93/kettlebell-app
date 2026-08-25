@@ -99,7 +99,9 @@ function chooseCandidate(candidates: Candidate[], seed: number): Candidate {
   const bestCoverage = Math.max(...candidates.map((c) => c.coverage));
   const covered = candidates.filter((c) => c.coverage === bestCoverage);
   const bestDev = Math.min(...covered.map((c) => c.dev));
-  const cap = Math.min(bestDev + CANDIDATE_SLACK, Math.max(bestDev, TOLERANCE));
+  // Aim inside the tolerance, not at its edge. Admitting a candidate that sits
+  // exactly on TOLERANCE leaves no margin at all, so the ceiling is nine tenths of it.
+  const cap = Math.min(bestDev + CANDIDATE_SLACK, Math.max(bestDev, TOLERANCE * 0.9));
   const finalists = covered.filter((c) => c.dev <= cap);
   return finalists[Math.floor(createRng(streamSeed(seed, TIE_STREAM))() * finalists.length)];
 }
