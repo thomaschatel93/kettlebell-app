@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { historyWeight, orderCircuit, selectCircuit, selectStrength } from '@/lib/select';
-import { createRng, shuffle } from '@/lib/rng';
-import { ex, req, entry, FIXTURE_EXERCISES } from './fixtures';
+import { historyWeight, orderCircuit, selectCircuit, selectCombos, selectStrength } from '@/lib/select';
+import { createRng } from '@/lib/rng';
+import { combo, ex, req, entry, FIXTURE_EXERCISES } from './fixtures';
 import { filterPool } from '@/lib/pool';
 import { FULL_KIT } from './fixtures';
 import type { Exercise, Pattern } from '@/lib/types';
@@ -12,17 +12,20 @@ const adjacentOk = (out: Exercise[], wrap: boolean): boolean => {
   return true;
 };
 
+/** How many slots the most-used primary pattern occupies. */
+const heaviestPattern = (items: Exercise[]): number => {
+  const counts = new Map<Pattern, number>();
+  for (const e of items) counts.set(e.patterns[0], (counts.get(e.patterns[0]) ?? 0) + 1);
+  return Math.max(...counts.values());
+};
+
 /**
  * A circuit admits an ordering when no single pattern holds more than half the slots.
  * Half means floor, not ceil, because the wrap-around makes this a circle: n slots
  * need n separators, so three of five is already one too many. Ceil is the bound for
  * a straight line, where the two ends never meet.
  */
-const solvable = (items: Exercise[]): boolean => {
-  const counts = new Map<Pattern, number>();
-  for (const e of items) counts.set(e.patterns[0], (counts.get(e.patterns[0]) ?? 0) + 1);
-  return Math.max(...counts.values()) <= Math.floor(items.length / 2);
-};
+const solvable = (items: Exercise[]): boolean => heaviestPattern(items) <= Math.floor(items.length / 2);
 
 describe('historyWeight', () => {
   it('penalises anything in the last two workouts, compared on main ids', () => {
@@ -58,14 +61,14 @@ describe('orderCircuit', () => {
     let checked = 0;
     for (let seed = 0; seed < 2000; seed++) {
       const rng = createRng(seed);
-      const n = 4 + Math.floor(rng() * 3);
+      const n = 3 + Math.floor(rng() * 5);
       const items = Array.from({ length: n }, (_, i) =>
         ex(`e${i}`, { patterns: [patterns[Math.floor(rng() * patterns.length)]] }));
       if (!solvable(items)) continue;
       checked++;
       expect(adjacentOk(orderCircuit(items), true), `seed ${seed}`).toBe(true);
     }
-    expect(checked).toBeGreaterThan(500);
+    expect(checked).toBeGreaterThan(1000);
   });
 
   it('still returns every item when no valid ordering exists', () => {
@@ -96,9 +99,14 @@ describe('selectCircuit', () => {
   });
 
   it('spreads the fill across under-represented patterns', () => {
-    const out = selectCircuit(pool, req({ patterns: ['hinge'] }), createRng(3), [], 4);
-    const primaries = out.map((e) => e.patterns[0]);
-    expect(new Set(primaries).size).toBeGreaterThan(1);
+    // One requested pattern leaves three of four slots to the fill loop, so an
+    // indiscriminate fill would stack them onto one pattern. Keeping the heaviest
+    // pattern at or under half the slots is exactly what keeps the set orderable.
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const out = selectCircuit(pool, req({ patterns: ['hinge'] }), createRng(seed), [], 4);
+      expect(new Set(out.map((e) => e.patterns[0])).size, `seed ${seed}`).toBeGreaterThan(1);
+      expect(heaviestPattern(out), `seed ${seed}`).toBeLessThanOrEqual(Math.ceil(out.length / 2));
+    }
   });
 
   it('never repeats an exercise', () => {
@@ -121,7 +129,28 @@ describe('selectStrength', () => {
   });
 
   it('prefers distinct primary patterns', () => {
-    const out = selectStrength(pool, createRng(4), [], 3);
-    expect(new Set(out.map((e) => e.patterns[0])).size).toBeGreaterThan(1);
+    // The pool covers hinge, squat and push, so three slots should land on three
+    // patterns every time. Anything less means the fresh-pattern preference slipped.
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const out = selectStrength(pool, createRng(seed), [], 3);
+      expect(new Set(out.map((e) => e.patterns[0])).size, `seed ${seed}`).toBe(3);
+    }
+  });
+});
+
+// FINDING 3: selectCombos had no coverage at all.
+describe('selectCombos', () => {
+  const combos = Array.from({ length: 5 }, (_, i) => combo(`c${i}`));
+
+  it('returns the count asked for and never repeats a combo', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const out = selectCombos(combos, createRng(seed), [], 3);
+      expect(out, `seed ${seed}`).toHaveLength(3);
+      expect(new Set(out.map((c) => c.id)).size, `seed ${seed}`).toBe(3);
+    }
+  });
+
+  it('returns what it can when the pool is smaller than the count', () => {
+    expect(selectCombos(combos.slice(0, 2), createRng(1), [], 4)).toHaveLength(2);
   });
 });

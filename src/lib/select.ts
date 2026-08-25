@@ -7,6 +7,9 @@ const RECENT_WORKOUTS = 2;
  * Compared against mainExerciseIds, which is what the runner writes for the main
  * block only. Comparing against every id, warm-up included, would make this rule
  * dead code, because the arrays could never match.
+ *
+ * history is expected newest first. Storage prepends each new entry, so slicing the
+ * head takes the two most recent workouts. That is the contract, hence no sort here.
  */
 export function historyWeight(id: string, history: HistoryEntry[]): number {
   const recent = history.slice(0, RECENT_WORKOUTS).flatMap((h) => h.mainExerciseIds);
