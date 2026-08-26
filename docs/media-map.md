@@ -84,3 +84,44 @@ reason written beside the id.
   wobble in the source still, not a form fault: the grip, the rack, the depth and
   the knee tracking are all right, so it ships. Worth replacing if the still is
   ever regenerated.
+
+## What the dark-background conversion costs
+
+Turning the white source sheets into dark card images means deciding which enclosed
+white regions are background and which are part of the drawing. The rule fills any
+enclosed light region whose colour matches the exterior and which sits further from
+the exterior than the outline is thick. It deliberately ignores region SIZE — an
+earlier version used an area threshold and shipped nine tiles with white pockets in
+them, because a real background pocket can be as small as 0.1% of the image.
+
+The cost is that a flat white detail fully enclosed by the figure is treated as
+background. Five tiles lost decoration this way:
+
+| Tile | What it lost |
+|---|---|
+| `single-leg-deadlift` | the white shorts stripe, entirely (758px) |
+| `floor-press` | the shorts stripe (1084px) and the ankle sock, now dark grey (1412px) |
+| `racked-front-squat` | the lower two-thirds of the white hip crescent (715px) |
+| `turkish-get-up` | the LEFT panel's stripe (475px); the right panel keeps its own |
+| `farmers-carry` | a thin sliver (162px) |
+
+All 24 grid tiles keep their stripes, so the seam is two stills in plain black shorts
+beside 24 striped ones, plus the get-up disagreeing with itself panel to panel.
+
+**The trade-off is deliberate and it is the right way round.** The alternative is
+white pockets inside the figures, which is far more visible on a dark card than a
+missing stripe. Judgement on the get-up mismatch: not worth regenerating. The stripe
+is a few pixels at the size the card actually displays, and the two figures differ in
+pose and scale anyway, so the eye does not read them as a matched pair.
+
+**If you regenerate any of these images**, know that a flat white detail fully
+enclosed by the figure will be removed. Ask for the stripes to carry a thin outline
+and they will survive.
+
+## Notes on pictures that do ship
+
+- `bent-over-row` shows a bench, but the exercise declares `needsBench: false` and
+  that is correct — the movement needs no bench. Benchless users will see equipment
+  they do not have. Cosmetic; regenerate when convenient.
+- `racked-front-squat` has an odd loop on the shorts. An artwork wobble in the
+  source, not a form fault.
