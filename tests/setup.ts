@@ -27,3 +27,23 @@ if (jsdomGlobal && typeof globalThis.localStorage?.clear !== 'function') {
     });
   }
 }
+
+/**
+ * jsdom ships no media stack at all: `play`, `pause` and `load` are stubs that
+ * shout "Not implemented" at the virtual console and return undefined. The run
+ * screen plays three countdown cues, so without this every runner test buries
+ * its real output under forty lines of that.
+ *
+ * Stubbed rather than silenced, and `play` returns a real promise, because the
+ * production code branches on whether one comes back. A stub that returned
+ * undefined would leave that branch untested in exactly the environment meant
+ * to test it.
+ */
+const media = globalThis.HTMLMediaElement?.prototype;
+if (media) {
+  Object.defineProperties(media, {
+    play: { configurable: true, writable: true, value: function play(this: HTMLMediaElement) { return Promise.resolve(); } },
+    pause: { configurable: true, writable: true, value: function pause(this: HTMLMediaElement) {} },
+    load: { configurable: true, writable: true, value: function load(this: HTMLMediaElement) {} },
+  });
+}

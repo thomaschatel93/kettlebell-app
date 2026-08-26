@@ -1,0 +1,131 @@
+'use client';
+
+import { useCallback, useEffect, useRef } from 'react';
+
+/**
+ * The three cues that count a rest down: a tick at three, two and one, and a
+ * single tone at zero.
+ *
+ * Sound is not decoration here. Everything else on the run screen assumes the
+ * phone is a metre away on the floor; sound is the only channel that still
+ * reaches him mid-plank with his eyes shut. Vibration is not an alternative -
+ * `navigator.vibrate` does not exist on iOS Safari at all.
+ *
+ * A media element rather than Web Audio, deliberately. iOS silences Web Audio
+ * with the hardware ringer switch, which is exactly the position a phone in a
+ * garage lives in, whereas user-initiated media plays on the media channel and
+ * mixes over whatever music is already going.
+ *
+ * `unlock` must be called from inside a real user gesture, or every later
+ * `play()` is rejected. It is safe to call on every tap: it does its work once
+ * and then costs nothing.
+ */
+export interface AudioCues {
+  unlock: () => void;
+  tick: () => void;
+  go: () => void;
+}
+
+/**
+ * `play()` is specified to return a promise, and does in every browser this app
+ * runs in - but not in jsdom, where the whole media stack is a stub. The cast
+ * describes what can actually come back, and the try/catch covers the stubs
+ * that throw outright. A missing beep must never take the screen down with it.
+ */
+function start(el: HTMLAudioElement): void {
+  try {
+    const started = el.play() as Promise<void> | undefined;
+    started?.catch(() => {
+      // Muted phone, or no gesture yet. Not worth interrupting a set for.
+    });
+  } catch {
+    // No decoder. Nothing to say and nothing to do.
+  }
+}
+
+/** Setting currentTime is another stubbed member outside a real browser. */
+function rewind(el: HTMLAudioElement): void {
+  try {
+    el.currentTime = 0;
+  } catch {
+    // Nothing to rewind.
+  }
+}
+
+/**
+ * Rewound before playing, so three ticks a second apart are three ticks rather
+ * than one that never restarts.
+ */
+function cue(el: HTMLAudioElement | null): void {
+  if (el === null) return;
+  rewind(el);
+  start(el);
+}
+
+export function useAudioCues(): AudioCues {
+  const tickEl = useRef<HTMLAudioElement | null>(null);
+  const goEl = useRef<HTMLAudioElement | null>(null);
+  const unlocked = useRef(false);
+
+  useEffect(() => {
+    // Constructed on mount rather than in render: `new Audio()` is a side
+    // effect. `preload` is set BEFORE `src`, because assigning the source is
+    // what starts the resource selection algorithm - set it after and the hint
+    // arrives too late to do anything. Preloading matters more than it looks: a
+    // cue fetched at the moment it is needed lands late, and a countdown beep
+    // that arrives after zero is worse than no beep at all.
+    const cues = ['/audio/tick.mp3', '/audio/go.mp3'].map((src) => {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.volume = 0.8;
+      el.src = src;
+      return el;
+    });
+    [tickEl.current, goEl.current] = cues;
+
+    return () => {
+      for (const el of cues) {
+        el.pause();
+        // Dropped, so a backgrounded session does not sit on two decoders.
+        el.removeAttribute('src');
+      }
+      tickEl.current = null;
+      goEl.current = null;
+    };
+  }, []);
+
+  const unlock = useCallback(() => {
+    if (unlocked.current) return;
+    unlocked.current = true;
+
+    for (const el of [tickEl.current, goEl.current]) {
+      if (el === null) continue;
+      // Played muted and immediately stopped: enough to satisfy iOS that these
+      // elements were started by a human, silent enough that he hears nothing.
+      el.muted = true;
+      try {
+        const started = el.play() as Promise<void> | undefined;
+        void started
+          ?.then(() => {
+            el.pause();
+            rewind(el);
+            el.muted = false;
+          })
+          .catch(() => {
+            el.muted = false;
+            // No gesture after all. Try again on the next tap.
+            unlocked.current = false;
+          });
+      } catch {
+        el.muted = false;
+        unlocked.current = false;
+      }
+    }
+  }, []);
+
+  return {
+    unlock,
+    tick: useCallback(() => cue(tickEl.current), []),
+    go: useCallback(() => cue(goEl.current), []),
+  };
+}
