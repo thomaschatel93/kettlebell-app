@@ -124,28 +124,41 @@ describe('the real database drives the engine', () => {
    * to either configuration (auto only reaches `strength` at >=35min, and only
    * reaches `complex` when four-plus patterns have not already forced `circuit`).
    * Recorded here as known, bounded behaviour rather than left free to drift
-   * silently worse. If the engine is later improved and one of these stops being
-   * short, that is a good failure — update the pinned bound to match, do not
-   * loosen it pre-emptively.
+   * silently worse.
+   *
+   * `deviation()` in `src/lib/fit.ts` (and `shortOfBudget`, which is built from it)
+   * is deliberately symmetric: the engine does not care which way a miss goes when
+   * deciding whether to flag one. These two pins are not the engine, though — they
+   * exist to catch a SILENT CHANGE in a specific known behaviour, and a session
+   * flipping from running 20% long to running 20% short is exactly the kind of
+   * change a pin should catch. So each computes its own SIGNED deviation
+   * (`(estimatedSeconds - target) / target`, no `Math.abs`) and asserts both the
+   * direction and the bound. The strength case genuinely overshoots (runs long);
+   * the complex case genuinely undershoots (runs short) — see the fix-round-2
+   * addendum in the task report for how each was confirmed.
+   *
+   * If the engine is later improved and one of these stops being off, that is a
+   * good failure — update the pinned direction and bound to match, do not loosen
+   * either pre-emptively.
    */
   describe('known, pre-existing engine shortfalls (not reachable via auto)', () => {
-    it('forced strength at 15 minutes on a single bell overshoots the budget by a bounded amount', () => {
+    it('forced strength at 15 minutes on a single bell OVERSHOOTS the budget, positive and bounded', () => {
       const w = run({ patterns: FEW, format: 'strength', totalMinutes: 15, seed: 1 }, HOME_KIT);
-      const dev = Math.abs(w.estimatedSeconds - 900) / 900;
+      const signedDev = (w.estimatedSeconds - 900) / 900;
       expect(w.shortOfBudget, `estimated ${w.estimatedSeconds}s vs 900s target`).toBe(true);
-      expect(dev).toBeGreaterThan(0.10);
-      expect(dev).toBeLessThan(0.35);
+      expect(signedDev, `signed deviation ${(signedDev * 100).toFixed(1)}%`).toBeGreaterThan(0.10);
+      expect(signedDev, `signed deviation ${(signedDev * 100).toFixed(1)}%`).toBeLessThan(0.35);
     });
 
-    it('forced complex on a single narrow pattern falls short at 45 and 60 minutes by a bounded amount', () => {
+    it('forced complex on a single narrow pattern UNDERSHOOTS the budget at 45 and 60 minutes, negative and bounded', () => {
       for (const kit of [FULL_KIT, HOME_KIT]) {
         for (const totalMinutes of [45, 60] as const) {
           const w = run({ patterns: ['push'], format: 'complex', totalMinutes, seed: 1 }, kit);
           const target = totalMinutes * 60;
-          const dev = Math.abs(w.estimatedSeconds - target) / target;
+          const signedDev = (w.estimatedSeconds - target) / target;
           expect(w.shortOfBudget, `${kit.name} ${totalMinutes}min: ${w.estimatedSeconds}s vs ${target}s`).toBe(true);
-          expect(dev, `${kit.name} ${totalMinutes}min`).toBeGreaterThan(0.10);
-          expect(dev, `${kit.name} ${totalMinutes}min`).toBeLessThan(0.45);
+          expect(signedDev, `${kit.name} ${totalMinutes}min signed deviation ${(signedDev * 100).toFixed(1)}%`).toBeLessThan(-0.10);
+          expect(signedDev, `${kit.name} ${totalMinutes}min signed deviation ${(signedDev * 100).toFixed(1)}%`).toBeGreaterThan(-0.45);
         }
       }
     });
