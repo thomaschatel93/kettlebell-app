@@ -69,7 +69,13 @@ function write(key: string, value: unknown): boolean {
   }
 }
 
-const DEFAULT_PREFS: Prefs = { patterns: ['hinge', 'squat', 'push'], effort: 'normal', totalMinutes: 30 };
+/**
+ * What a first-time user gets, and what a stored value falls back to field by
+ * field. Exported so `prefs-store.ts` can use a clone of it as the placeholder
+ * the server render and the hydration render both see: the Setup screen renders
+ * real controls before storage has been read, and they have to show something.
+ */
+export const DEFAULT_PREFS: Prefs = { patterns: ['hinge', 'squat', 'push'], effort: 'normal', totalMinutes: 30 };
 
 function isValidBell(x: unknown): x is { weightKg: number; count: number } {
   return isPlainObject(x)
@@ -154,6 +160,15 @@ export const saveKits = (state: KitState): boolean => write(KEYS.kits, { ...stat
  * value rather than retyped there, so the two cannot drift apart.
  */
 export const KITS_KEY: string = KEYS.kits;
+
+/**
+ * The prefs and active-workout keys, exported for the same reason as KITS_KEY:
+ * `prefs-store.ts` and `active-store.ts` each listen for a `storage` event and
+ * have to tell their own key from anyone else's. Exported as values rather than
+ * retyped there, so the two cannot drift apart.
+ */
+export const PREFS_KEY: string = KEYS.prefs;
+export const ACTIVE_KEY: string = KEYS.active;
 
 /**
  * The minimum an entry needs to be worth keeping at all. `id` identifies it;

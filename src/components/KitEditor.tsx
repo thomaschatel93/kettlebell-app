@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/Card';
+import { FILLED_CONTROL, OPTION_SHELL, Option } from '@/components/Option';
 import { isUnderSpecified } from '@/lib/kit';
 import { isKitHydrated, publishKit, useKit } from '@/lib/kit-store';
 import { CAPABILITIES, type Capability, type KitProfile } from '@/lib/types';
@@ -32,31 +33,13 @@ const bellSummary = (kit: KitProfile): string => {
 };
 
 /**
- * A control filled with the accent.
- *
- * The ink is --fill-ink, the token globals.css defines for text on a filled
- * control, and NOT --accent-ink. That distinction is the accessibility of this
- * screen: --accent-ink is white, 3.32:1 on the accent, which clears AA only as
- * large text (>=18.66px bold - what ACCENT_SAFE_TYPE pins on Button). Every
- * filled control here carries a small subtitle line, so it needs the ink that
- * passes at any size. `tokens.test.ts` pins the token pair and
- * `kit-editor.test.tsx` pins this use of it.
- *
- * Button and Chip are deliberately not reused for these controls. Button has no
- * selected state and no subtitle slot, and forces a single 20px bold label;
- * Chip's `tone` is typed as a movement Pattern on purpose, so a weight or a
- * place to train has no legal tone, and colouring a 24 kg chip --hinge would
- * misuse hues that carry movement identity and nothing else.
+ * The filled look and the unfilled body both live in `Option`, so this screen
+ * and the Setup screen cannot drift into two versions of the same control - or,
+ * worse, two answers to which ink is legal on a filled background. See the note
+ * there, and in globals.css, for why it is --fill-ink and never --accent-ink.
  */
-const FILLED = {
-  backgroundColor: 'var(--accent)',
-  borderColor: 'var(--accent)',
-  color: 'var(--fill-ink)',
-} as const;
-
-const SHELL =
-  'tap-target w-full rounded-[var(--radius)] border border-[var(--border)] ' +
-  'bg-[var(--surface-2)] text-left transition-opacity active:opacity-80';
+const FILLED = FILLED_CONTROL;
+const SHELL = OPTION_SHELL;
 
 /**
  * The first screen with anything at stake: which bells exist decides every
@@ -115,27 +98,16 @@ export function KitEditor() {
         <h2 className="text-lg font-bold tracking-tight">Where you train</h2>
 
         <div className="grid grid-cols-2 gap-3">
-          {state.profiles.map((p) => {
-            const selected = p.id === active.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => publishKit({ ...state, activeId: p.id })}
-                style={selected ? FILLED : undefined}
-                className={`${SHELL} px-4 py-3`}
-              >
-                <span className="block text-base font-bold leading-tight">{p.name}</span>
-                <span
-                  className="block text-sm leading-tight"
-                  style={{ color: selected ? 'var(--fill-ink)' : 'var(--text-dim)' }}
-                >
-                  {bellSummary(p)}
-                </span>
-              </button>
-            );
-          })}
+          {state.profiles.map((p) => (
+            <Option
+              key={p.id}
+              selected={p.id === active.id}
+              hint={bellSummary(p)}
+              onClick={() => publishKit({ ...state, activeId: p.id })}
+            >
+              {p.name}
+            </Option>
+          ))}
         </div>
 
         <button
