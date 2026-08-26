@@ -14,6 +14,9 @@ const work = (name: string, over: Partial<Step> = {}): Step => ({
 } as Step);
 const rest = (seconds: number, nextName: string): Step =>
   ({ kind: 'rest', seconds, nextName, block: 'Main', estSeconds: seconds });
+/** A cool-down move, which the runner renders as a checklist rather than a card. */
+const cool = (name: string): Step =>
+  work(name, { block: 'Cool-down', bellKg: null, reps: undefined, seconds: 30, totalRounds: 1 });
 
 const workout = (steps: Step[]): Workout => ({
   id: 'w1', createdAt: '2026-08-25T09:00:00.000Z', format: 'circuit', steps,
@@ -139,6 +142,54 @@ describe('WorkoutRunner', () => {
     fireEvent.click(screen.getByRole('button', { name: /leave for now/i }));
     expect(loadActive()).not.toBeNull();
     expect(loadHistory()).toHaveLength(0);
+  });
+
+  /**
+   * Every session ends on the cool-down checklist, so this button is the last
+   * thing the app does. Routing it to a Next that no-ops on the final step made
+   * it dead exactly there: he ticks his stretches, taps the obvious control and
+   * nothing happens.
+   */
+  it('finishes the session when Done is tapped on the last block', () => {
+    seed([work('Swing'), cool('Hamstring Stretch')]);
+    render(<WorkoutRunner />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    screen.getByRole('heading', { name: 'Cool-down' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(loadHistory()).toHaveLength(1);
+    expect(loadActive()).toBeNull();
+    expect(push).toHaveBeenCalledWith('/workout/done');
+  });
+
+  /** The same dead shape, which is why the fix is in one place rather than two. */
+  it('finishes the session when Skip rest is the last thing left', () => {
+    seed([work('Swing'), rest(30, 'nothing')]);
+    render(<WorkoutRunner />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip rest' }));
+    expect(loadHistory()).toHaveLength(1);
+    expect(loadActive()).toBeNull();
+    expect(push).toHaveBeenCalledWith('/workout/done');
+  });
+
+  /**
+   * A rest belongs to what comes next. The card already says "Next: <a round
+   * two move>", so a header reading "Round 1 of 4" beside it reads as a bug.
+   */
+  it('names the round the rest is leading into, not the one just finished', () => {
+    seed([
+      work('Swing', { round: 1, totalRounds: 4 }),
+      rest(30, 'Swing'),
+      work('Swing', { round: 2, totalRounds: 4 }),
+    ]);
+    render(<WorkoutRunner />);
+    screen.getByText('Round 1 of 4');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    screen.getByRole('heading', { name: 'Rest' });
+    screen.getByText('Round 2 of 4');
   });
 
   it('writes a partial record when ending early, never discarding the session', () => {

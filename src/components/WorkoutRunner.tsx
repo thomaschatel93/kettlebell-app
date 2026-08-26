@@ -81,19 +81,33 @@ function unitRange(steps: Step[], index: number): { start: number; end: number }
 }
 
 /**
- * Which round he is on, taken from the nearest work step at or before the
- * current one - a rest carries no round of its own, and "Round 2 of 3" is
- * exactly the thing he wants during the rest before round two.
+ * The work step the header speaks for.
  *
- * Silent for a single-round block: "Round 1 of 1" is a fact about nothing.
+ * A rest carries no round of its own, and it belongs to what comes NEXT: the
+ * card is already saying "Next: <a round two move>", so a header reading "Round
+ * 1 of 4" beside it reads as a bug. It names the round he is about to do.
  */
-function roundLabel(steps: Step[], index: number): string {
-  for (let i = Math.min(index, steps.length - 1); i >= 0; i -= 1) {
+function governingWork(steps: Step[], index: number): WorkStep | undefined {
+  const here = steps[index];
+  if (here?.kind === 'work') return here;
+
+  for (let i = index + 1; i < steps.length; i += 1) {
     const s = steps[i];
-    if (s.kind !== 'work') continue;
-    return s.totalRounds > 1 ? `Round ${s.round} of ${s.totalRounds}` : '';
+    if (s.kind === 'work') return s;
   }
-  return '';
+  // A rest with no work left after it falls back to what it followed.
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const s = steps[i];
+    if (s.kind === 'work') return s;
+  }
+  return undefined;
+}
+
+/** Silent for a single-round block: "Round 1 of 1" is a fact about nothing. */
+function roundLabel(steps: Step[], index: number): string {
+  const s = governingWork(steps, index);
+  if (s === undefined || s.totalRounds <= 1) return '';
+  return `Round ${s.round} of ${s.totalRounds}`;
 }
 
 function movePosition(step: Step | undefined): string {
@@ -274,11 +288,6 @@ export function WorkoutRunner() {
     if (range.start > 0) goTo(unitRange(steps, range.start - 1).start);
   };
 
-  const onNext = (): void => {
-    unlock();
-    setPaused(false);
-    if (!isLast) goTo(range.end + 1);
-  };
 
   const onPause = (): void => {
     unlock();
@@ -317,6 +326,29 @@ export function WorkoutRunner() {
     }));
   };
 
+  /**
+   * Everything that means "I am done with this screen" comes through here:
+   * Next, Skip rest, and the checklist's Done. It finishes the session when
+   * there is nothing after the current unit, rather than silently doing
+   * nothing.
+   *
+   * That no-op is what this replaces, and it was not a nicety. Every session
+   * ends on the cool-down checklist, so its Done button was dead on the last
+   * screen of every workout - he ticks six stretches, taps the obvious control
+   * and the app ignores him. The same dead shape sat on Skip rest for any
+   * workout ending on a rest, which is why the fix is here rather than a
+   * special case in the checklist.
+   */
+  const onAdvance = (): void => {
+    unlock();
+    setPaused(false);
+    if (isLast) {
+      record(steps);
+      return;
+    }
+    goTo(range.end + 1);
+  };
+
   const record = (done: Step[]): void => {
     if (state === null) return;
     const worked = state.workedSeconds + pending.current;
@@ -326,7 +358,6 @@ export function WorkoutRunner() {
     router.push('/workout/done');
   };
 
-  const onFinish = (): void => record(steps);
   /** A partial record, written BEFORE the session is cleared. */
   const onEndHere = (): void => record(steps.slice(0, range.start));
 
@@ -365,10 +396,20 @@ export function WorkoutRunner() {
     // so grey-on-near-black cannot get onto this screen by accident. The tap
     // handler is the audio unlock: any tap counts as the gesture iOS wants.
     <div
-      className="read-far mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-5"
+      /*
+       * An exact box, not `flex-1`. `.app-shell` sizes the body with
+       * `min-height`, which is not a definite height: a flex child of it grows
+       * with its content instead of being bounded by it, so `min-h-0` and
+       * `overflow-y-auto` further down had nothing to resolve against and the
+       * control bar slid off the bottom of the phone. Subtracting the safe-area
+       * inset here matches what the shell's own bottom padding takes, so the
+       * two agree and the page itself never scrolls.
+       */
+      className="read-far mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-bottom))] w-full
+        max-w-md flex-col gap-4 px-4 py-5"
       onPointerDown={unlock}
     >
-      <header className="flex flex-col gap-3">
+      <header className="flex shrink-0 flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
             {!checklist && (
@@ -416,38 +457,53 @@ export function WorkoutRunner() {
         <ProgressBar value={range.start} max={steps.length} label="Workout progress" />
       </header>
 
-      <main className="flex flex-1 flex-col justify-center">
-        {isAncillary(current) ? (
+      {/*
+        The one scrolling region on the screen, bounded above by the header and
+        below by the controls. The checklist fills it and scrolls its own list,
+        so its Done button is always on screen; a hero card is centred when it
+        fits and scrolls when it does not.
+      */}
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {checklist ? (
           <AncillaryChecklist
             steps={steps.slice(range.start, range.end + 1)}
             exercises={BY_ID}
-            onDone={onNext}
-          />
-        ) : current.kind === 'rest' ? (
-          <RestCard
-            remainingSeconds={shownRemaining ?? current.seconds}
-            nextName={current.nextName}
-            onSkip={onNext}
-            onAddTime={onAddTime}
+            onDone={onAdvance}
           />
         ) : (
-          <ExerciseCard step={current} exercise={BY_ID.get(current.exerciseId) ?? null} />
+          // `my-auto` rather than `justify-center`: a centred flex child that
+          // overflows its scroll container cannot be scrolled back up to.
+          <div className="my-auto">
+            {current.kind === 'rest' ? (
+              <RestCard
+                remainingSeconds={shownRemaining ?? current.seconds}
+                nextName={current.nextName}
+                onSkip={onAdvance}
+                onAddTime={onAddTime}
+              />
+            ) : (
+              <ExerciseCard step={current} exercise={BY_ID.get(current.exerciseId) ?? null} />
+            )}
+          </div>
         )}
       </main>
 
       {/*
-        Pinned, because a card with a picture and three cues on it is taller
-        than the phone and the controls were ending up below the fold - on the
-        one screen where nothing may need scrolling to. `safe-bottom` holds the
-        last row clear of the home indicator.
+        A flex sibling of the scrolling region rather than a sticky overlay.
+        Sticky kept the controls on screen but floated them OVER the card, and
+        the checklist's Done button ended up half behind the bar - a control
+        that looks broken, sitting next to one that was. Nothing can be behind
+        this now: the screen is exactly the height of the phone and only the
+        middle scrolls. `.app-shell` already holds the body clear of the home
+        indicator, so this needs no inset of its own.
 
         Pause sits here beside Next because that is where his thumb already is;
         Previous is directly above, always live and never confirmed. Exit stayed
         in the header, where a mis-tap is least likely, and that is exactly why
         it stayed there.
       */}
-      <div className="safe-bottom sticky bottom-0 z-20 -mx-4 flex flex-col gap-3 border-t
-        border-[var(--border)] bg-[var(--bg)] px-4 pb-3 pt-3">
+      <div className="-mx-4 flex shrink-0 flex-col gap-3 border-t border-[var(--border)]
+        bg-[var(--bg)] px-4 pb-1 pt-3">
         <div role="status" className="min-h-6">
           {paused && (
             <p className="text-center text-base font-bold uppercase tracking-widest text-[var(--accent)]">
@@ -463,7 +519,7 @@ export function WorkoutRunner() {
           <Button variant="ghost" onClick={paused ? onResume : onPause}>
             {paused ? 'Resume' : 'Pause'}
           </Button>
-          <Button onClick={isLast ? onFinish : onNext}>{isLast ? 'Finish' : 'Next'}</Button>
+          <Button onClick={onAdvance}>{isLast ? 'Finish' : 'Next'}</Button>
         </div>
       </div>
     </div>

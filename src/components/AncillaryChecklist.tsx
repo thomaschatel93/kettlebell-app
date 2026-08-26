@@ -55,7 +55,10 @@ export function AncillaryChecklist({
   const allDone = items.length > 0 && ticked.size === items.length;
 
   return (
-    <Card className="flex flex-col gap-4">
+    // `flex-1 min-h-0` so the card fills the runner's scrolling region exactly:
+    // the list scrolls inside it and the Done button below stays on screen,
+    // rather than the whole card growing past the bottom of the phone.
+    <Card className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight text-[var(--text)]">{block}</h1>
         <p className="text-base font-bold tabular-nums text-[var(--text)]">
@@ -63,9 +66,9 @@ export function AncillaryChecklist({
         </p>
       </div>
 
-      {/* Scrolls inside the card rather than the page, so the Done button and
-          the bottom row stay where his thumb last found them. */}
-      <ul className="flex max-h-[52vh] flex-col gap-1 overflow-y-auto">
+      {/* The list scrolls, not the card, so Done never leaves the screen. Every
+          session ends on this button; it is the last thing the app does. */}
+      <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
         {items.map((s, i) => {
           const done = ticked.has(i);
           return (
@@ -98,9 +101,11 @@ export function AncillaryChecklist({
         })}
       </ul>
 
-      <Button variant={allDone ? 'primary' : 'ghost'} onClick={onDone}>
-        Done
-      </Button>
+      <div className="shrink-0">
+        <Button variant={allDone ? 'primary' : 'ghost'} onClick={onDone}>
+          Done
+        </Button>
+      </div>
     </Card>
   );
 }
