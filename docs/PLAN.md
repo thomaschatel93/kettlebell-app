@@ -3023,26 +3023,43 @@ git add -A && git commit -m "test: assert the real database drives the engine wi
 
 ---
 
-### Task 15: Slice the grid and wire up the media
+### Task 15: Wire up the media
 
 **Files:**
-- Create: `scripts/slice-grid.mts`, `scripts/check-media.mts`
-- Modify: `src/lib/data/exercises.ts` (set `image` on the sliced entries)
+- Create: `scripts/slice-grid.mts`, `scripts/import-stills.mts`, `scripts/check-media.mts`
+- Modify: `src/lib/data/exercises.ts` (set `image` and `imagePanels` on what we have)
 - Create: `public/exercises/*.webp`
 - Test: `tests/media.test.ts`
 
 **Interfaces:**
-- Consumes: `EXERCISES` from Task 12
-- Produces: `npm run media:slice`, `npm run media:todo`
+- Consumes: `EXERCISES` from Task 12, and `docs/media-map.md`
+- Produces: `npm run media:slice`, `npm run media:import`, `npm run media:todo`
 
-This runs **before** the exercise card is built, so the card is designed against
-real assets and the background problem surfaces during design rather than during
-the final audit.
+This runs BEFORE the exercise card is built, so the card is designed against real
+assets and any background problem surfaces during design rather than during the
+final audit.
 
-Three corrections from the review. The naive 4×4 split is wrong: the sheet's labels
-sit past their cell's row boundary, so a uniform grid puts each row's labels into
-the next row's tile. The tiles are 184–237px, so they must never be upscaled. And
-flattening onto white would put a pure white square inside every dark card.
+**There are three media sources, not one.** The plan originally assumed a single
+sheet; the reality is:
+
+1. `media-source/grid-01.png`, 1254×1254. A 4×4 sheet of 16 cells, of which 15 are
+   wanted (Front Raise is dropped). **It has printed labels under each figure, and
+   those labels fall OUTSIDE their own cell's row boundary** — row one's figures
+   occupy y=36–304 while row one's labels sit at y=317–340, past the 313px cell
+   line. A uniform grid split therefore puts each row's labels into the next row's
+   tile. Slicing must detect the bands, not assume them. Figures come out roughly
+   184–237px wide: these are placeholders, and must never be upscaled.
+2. `media-source/grid-02.png`, 1448×1086. A 4×3 sheet, **no printed labels**, clean
+   even gutters, cells roughly 362px. Generated from `docs/remaining-images-prompt.md`.
+3. Nineteen individual 1024×1024 stills, saved under auto-generated filenames.
+   `docs/media-map.md` records which exercise each one shows, with a confidence and
+   the visual evidence for the call.
+
+**`docs/media-map.md` is the source of truth for the mapping.** Read it. It also
+names one image as **do not ship**: a clean where the hand grips the round ball of
+the bell rather than the handle, with the elbow flared away from the ribs — the
+exact mistake the app's own cue text warns about for that lift. A picture that
+contradicts its own caption is worse than no picture. It must not be imported.
 
 - [ ] **Step 1: Install the tools**
 
@@ -3050,134 +3067,80 @@ flattening onto white would put a pure white square inside every dark card.
 npm install -D sharp tsx
 ```
 
-Add scripts: `"media:slice": "tsx scripts/slice-grid.mts"`, `"media:todo": "tsx scripts/check-media.mts"`.
+Add scripts: `"media:slice": "tsx scripts/slice-grid.mts"`,
+`"media:import": "tsx scripts/import-stills.mts"`,
+`"media:todo": "tsx scripts/check-media.mts"`.
 
-- [ ] **Step 2: Write the self-detecting slicer**
+- [ ] **Step 2: Write one self-detecting slicer that handles both sheets**
 
-`scripts/slice-grid.mts`:
+`scripts/slice-grid.mts` must work on either grid without hard-coded geometry,
+because the two differ in size, cell count and whether labels are present.
+
+The detection that works, verified against both sheets:
+
+1. Read the image as raw greyscale. Treat a pixel as content when its luminance is
+   below about 235.
+2. Build a column profile: for each x, does any y hold content? Group into bands,
+   merging bands separated by small gaps. Discard bands narrower than about 40px.
+   That yields the columns.
+3. Within each column band, build a row profile the same way. Group into bands.
+   **The tall bands are figures; the short ones are printed labels.** A threshold
+   around 60px separates them cleanly on grid-01, and grid-02 simply has no short
+   bands to discard.
+4. Assert the detected grid matches what was expected and THROW if it does not. A
+   silent mis-slice that ships the wrong picture on the wrong exercise is the
+   failure mode this whole task exists to avoid.
+
+Then for each detected cell, in reading order:
 
 ```ts
-import sharp from 'sharp';
-import { mkdir } from 'node:fs/promises';
-
-const SOURCE = 'media-source/grid-01.png';
-const OUT = 'public/exercises';
-const CARD = '#161618';          // --surface, so the still merges into its card
-const WHITE_CUTOFF = 235;        // luminance above this counts as background
-const MIN_FIGURE_PX = 60;        // taller than a label line, shorter than nothing
-
-/** Reading order, left to right and top to bottom. `null` skips a tile. */
-const TILES: (string | null)[] = [
-  'two-hand-swing', 'goblet-squat', 'deadlift', 'clean-and-press',
-  'front-lunge', 'sumo-deadlift', 'single-arm-swing', 'overhead-press',
-  'russian-twist', 'step-up', 'bent-over-row', null,   // Front Raise is dropped
-  'snatch', 'halo', 'reverse-lunge', 'squat-to-press',
-];
-
-/** Contiguous runs of non-background, merged across gaps of `gap` or fewer. */
-function bands(profile: number[], gap: number): [number, number][] {
-  const runs: [number, number][] = [];
-  let start: number | null = null;
-  profile.forEach((v, i) => {
-    if (v > 0 && start === null) start = i;
-    else if (v === 0 && start !== null) { runs.push([start, i - 1]); start = null; }
-  });
-  if (start !== null) runs.push([start, profile.length - 1]);
-
-  const merged: [number, number][] = [];
-  for (const b of runs) {
-    const last = merged.at(-1);
-    if (last && b[0] - last[1] <= gap) last[1] = b[1];
-    else merged.push([...b] as [number, number]);
-  }
-  return merged;
-}
-
-const { data, info } = await sharp(SOURCE).greyscale().raw().toBuffer({ resolveWithObject: true });
-const { width, height } = info;
-const dark = (x: number, y: number) => data[y * width + x] < WHITE_CUTOFF;
-
-// Columns first, then the figure bands within each column. The short bands are the
-// printed labels; the tall ones are the figures. Detecting rather than assuming is
-// the whole point: the labels do not sit inside their own row's cell.
-const columns = bands(
-  Array.from({ length: width }, (_, x) => {
-    for (let y = 0; y < height; y += 3) if (dark(x, y)) return 1;
-    return 0;
-  }), 10,
-).filter(([a, b]) => b - a > 40);
-
-if (columns.length !== 4) throw new Error(`Expected 4 columns, found ${columns.length}`);
-
-await mkdir(OUT, { recursive: true });
-
-for (const [ci, [x0, x1]] of columns.entries()) {
-  const rows = bands(
-    Array.from({ length: height }, (_, y) => {
-      for (let x = x0; x <= x1; x += 2) if (dark(x, y)) return 1;
-      return 0;
-    }), 6,
-  ).filter(([a, b]) => b - a + 1 > MIN_FIGURE_PX);
-
-  if (rows.length !== 4) throw new Error(`Column ${ci}: expected 4 figures, found ${rows.length}`);
-
-  for (const [ri, [y0, y1]] of rows.entries()) {
-    const id = TILES[ri * 4 + ci];
-    if (!id) continue;
-    const pad = 10;
-    const left = Math.max(0, x0 - pad);
-    const top = Math.max(0, y0 - pad);
-
-    await sharp(SOURCE)
-      .extract({
-        left, top,
-        width: Math.min(width - left, x1 - x0 + 1 + pad * 2),
-        height: Math.min(height - top, y1 - y0 + 1 + pad * 2),
-      })
-      // Never enlarge. These tiles are ~200px; a crisp small image beats a soft
-      // upscaled one, and CSS can scale it down on the card.
-      .resize({ width: 900, height: 900, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: CARD })
-      .webp({ quality: 92, effort: 6 })
-      .toFile(`${OUT}/${id}.webp`);
-
-    console.log(`wrote ${OUT}/${id}.webp`);
-  }
-}
+await sharp(SOURCE)
+  .extract({ left, top, width, height })          // the detected band, plus ~10px padding
+  .resize({ width: 900, height: 900, fit: 'inside', withoutEnlargement: true })
+  .flatten({ background: '#161618' })              // --surface, so it merges into the card
+  .webp({ quality: 92, effort: 6 })
+  .toFile(`public/exercises/${id}.webp`);
 ```
 
-- [ ] **Step 3: Run it and check every tile by eye**
+`withoutEnlargement: true` is not optional. A crisp 200px image beats a soft 800px
+one, and CSS scales it down on the card. `flatten` onto the card colour matters
+just as much: a pure white square inside a dark card is the most visible defect
+this pipeline can ship.
+
+Take the tile-to-exercise mapping for grid-01 from the ids already fixed by this
+plan, and for grid-02 from `docs/remaining-images-prompt.md`, which lists its
+twelve cells in reading order. Cross-check both against `docs/media-map.md`.
+
+- [ ] **Step 3: Write the importer for the individual stills**
+
+`scripts/import-stills.mts` reads the mapping out of `docs/media-map.md`, and for
+each image whose confidence is high and which is not marked do-not-ship, converts
+it into `public/exercises/<id>.webp` with the same resize, flatten and quality
+settings. It must skip anything unidentified, anything low-confidence, and the
+flagged clean, and it must print what it skipped and why.
+
+- [ ] **Step 4: Run both and check every output by eye**
 
 ```bash
-npm run media:slice
+npm run media:slice && npm run media:import
 ```
 
-Open all fifteen. Each must show one complete figure, no label text, and a dark
-background. The script throws rather than guessing if the geometry does not match,
-so a silent mis-slice is not possible; a wrong *mapping* still is, which is what
-the next step tests.
+Then LOOK at every file written. Each must show one complete figure, no label
+text, and a dark background. Check the hands, the grip and the spine on each: image
+models get wrists and fingers wrong, and a picture teaching a rounded back on a
+deadlift is worse than a missing picture. Anything doubtful does not ship — leave
+its `image` as `null` and record it in the report.
 
-- [ ] **Step 4: Write the failing media test**
+- [ ] **Step 5: Write the failing media test**
 
 `tests/media.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
-import { EXERCISES, byId } from '@/lib/data/exercises';
-
-const SLICED = [
-  'two-hand-swing', 'goblet-squat', 'deadlift', 'clean-and-press',
-  'front-lunge', 'sumo-deadlift', 'single-arm-swing', 'overhead-press',
-  'russian-twist', 'step-up', 'bent-over-row',
-  'snatch', 'halo', 'reverse-lunge', 'squat-to-press',
-];
+import { EXERCISES } from '@/lib/data/exercises';
 
 describe('exercise media', () => {
-  it('maps every sliced tile to a real exercise', () => {
-    for (const id of SLICED) expect(byId(id), id).toBeDefined();
-  });
-
   it('points every non-null image at a file that exists', () => {
     for (const e of EXERCISES) {
       if (e.image === null) continue;
@@ -3191,50 +3154,56 @@ describe('exercise media', () => {
     }
   });
 
-  it('has an image for all fifteen sliced exercises', () => {
-    for (const id of SLICED) expect(byId(id)!.image, id).not.toBeNull();
+  it('has an image for a named, hard-coded set, so a deletion cannot delete its own check', () => {
+    const MUST_HAVE = [
+      'two-hand-swing', 'goblet-squat', 'deadlift', 'front-lunge', 'sumo-deadlift',
+      'single-arm-swing', 'overhead-press', 'russian-twist', 'step-up', 'bent-over-row',
+      'halo', 'reverse-lunge', 'squat-to-press',
+    ];
+    for (const id of MUST_HAVE) {
+      const e = EXERCISES.find((x) => x.id === id);
+      expect(e, id).toBeDefined();
+      expect(e!.image, id).not.toBeNull();
+    }
+  });
+
+  it('never ships the clean whose grip is wrong', () => {
+    // docs/media-map.md flags one generated clean as do-not-ship: the hand grips the
+    // ball rather than the handle. Until a correct one exists, this stays null.
+    const clean = EXERCISES.find((e) => e.id === 'clean');
+    expect(clean).toBeDefined();
   });
 });
 ```
 
-- [ ] **Step 5: Set the image paths**
+The hard-coded `MUST_HAVE` list is deliberate. A test that only iterates
+`EXERCISES` cannot catch a deletion, because removing an entry removes its own
+check — this project has already lost content that way once.
 
-In `src/lib/data/exercises.ts`, set `image: '/exercises/<id>.webp'` on those fifteen.
-Leave the other fourteen `null`.
+- [ ] **Step 6: Set the image paths and panel counts**
 
-- [ ] **Step 6: Write the missing-media report**
+In `src/lib/data/exercises.ts`, set `image: '/exercises/<id>.webp'` on every
+exercise that now has a verified file, and leave the rest `null`. Correct
+`imagePanels` to what the shipped image actually shows: a single-position still is
+1, whatever the exercise ideally wants. The field describes the asset, not the
+aspiration.
 
-`scripts/check-media.mts`:
+- [ ] **Step 7: Write the missing-media report**
 
-```ts
-import { EXERCISES } from '../src/lib/data/exercises.js';
+`scripts/check-media.mts` prints how many exercises have an image, then lists those
+still missing one with the number of panels they need, so the outstanding work is
+always one command away.
 
-const missing = EXERCISES.filter((e) => e.image === null);
-console.log(`${EXERCISES.length - missing.length} of ${EXERCISES.length} exercises have an image.\n`);
-if (missing.length === 0) console.log('Nothing left to shoot.');
-else {
-  console.log('Still to shoot:');
-  for (const e of missing) console.log(`  ${e.id.padEnd(28)} ${e.name}  (${e.imagePanels} panel${e.imagePanels > 1 ? 's' : ''})`);
-}
-```
-
-If `tsx` cannot resolve the `@/` alias from a standalone script, add
-`"paths"` resolution via `tsx --tsconfig tsconfig.json`, or change the import in
-`exercises.ts` to a relative one. Do not spend more than ten minutes on this; the
-report is a convenience and `tests/media.test.ts` is the gate that matters.
-
-- [ ] **Step 7: Verify**
+- [ ] **Step 8: Verify**
 
 Run: `npm run verify && npm run media:todo`
-Expected: PASS, and a list of the fourteen still to shoot.
+Expected: PASS, and an honest list of what is still outstanding.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add -A && git commit -m "feat: slice the exercise grid onto the card background"
+git add -A && git commit -m "feat: wire up the exercise stills"
 ```
-
----
 
 ### Task 16: Design tokens and shared primitives
 
