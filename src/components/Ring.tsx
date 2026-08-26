@@ -21,13 +21,16 @@ export function Ring({
   label: string;
   caption?: string;
 }) {
-  const done = max > 0 ? Math.min(Math.max(value, 0), max) : 0;
-  const fraction = max > 0 ? done / max : 0;
+  // The drawn digit and the announced one are the same number. Ring(9, 5)
+  // must not display "5" while telling a screen reader "9 of 5".
+  const ceiling = Math.max(max, 0);
+  const done = ceiling > 0 ? Math.min(Math.max(value, 0), ceiling) : 0;
+  const fraction = ceiling > 0 ? done / ceiling : 0;
 
   return (
     <div
       role="img"
-      aria-label={`${label}: ${value} of ${max}`}
+      aria-label={`${label}: ${done} of ${ceiling}`}
       className="relative inline-flex shrink-0"
       style={{ width: SIZE, height: SIZE }}
     >

@@ -17,12 +17,35 @@
   --text: #f5f5f6;
   --text-dim: #9a9aa1;      /* banned on the workout and rest screens - see .read-far */
   --accent: #ff4d1c;
-  --accent-ink: #ffffff;
+  --accent-ink: #ffffff;   /* 3.32:1 on --accent: LARGE TEXT ONLY, >=18.66px bold */
+  --fill-ink: var(--bg);   /* ink for text on any filled control - see below */
   --hinge: #f59e0b; --squat: #22c55e; --push: #3b82f6;
   --pull: #a855f7;  --carry: #06b6d4; --core: #ec4899;
   --radius: 20px;
   --tap: 44px;
 }
+
+/* ---------------------------------------------------------------------------
+   The two inks, and which goes where
+
+   There are two legal inks for text sitting on a filled control, and picking
+   the wrong one is an accessibility failure rather than a style slip:
+
+     --accent-ink  white on --accent   3.32:1  clears AA only as LARGE text,
+                                               meaning >=18.66px bold. That is
+                                               what ACCENT_SAFE_TYPE pins on the
+                                               primary Button, the one control
+                                               that qualifies.
+     --fill-ink    near-black          5.90:1  on --accent, and 4.97:1 at worst
+                                               on the six pattern colours
+                                               (--pull). Passes AA at ANY size.
+
+   So: a single large bold label on the accent may use --accent-ink. Anything
+   with a subtitle, a caption or small print - the selected Chip, every filled
+   control on the Kit screen - must use --fill-ink. The rule is stated here,
+   once; `tokens.test.ts` pins the pair and the component tests pin each use, so
+   the two files cannot drift into disagreeing about it.
+--------------------------------------------------------------------------- */
 
 html, body {
   background: var(--bg);
@@ -62,6 +85,15 @@ body {
 @utility tap-target {
   min-height: var(--tap);
   min-width: var(--tap);
+}
+
+/*
+ * For a FIXED bottom bar. .app-shell pads the body, but a fixed element is out
+ * of normal flow and ignores that padding entirely, so the bottom tab bar needs
+ * the inset applied to itself or its last row sits under the home indicator.
+ */
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Keyboard focus stays visible. :where() keeps specificity at zero. */

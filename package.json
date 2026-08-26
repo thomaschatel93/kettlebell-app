@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "pretypecheck": "next typegen",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test"
+    "verify": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
     "next": "16.3.2",

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { Button } from '@/components/Button';
+import { Button, ACCENT_SAFE_TYPE } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { Chip } from '@/components/Chip';
+import { Chip, CHIP_TINT_PCT } from '@/components/Chip';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Ring } from '@/components/Ring';
 
@@ -20,6 +20,30 @@ describe('Button', () => {
   it('does not submit a surrounding form unless it is asked to', () => {
     render(<Button>Start</Button>);
     expect(screen.getByRole('button')).toHaveAttribute('type', 'button');
+  });
+
+  it('keeps the primary label at large-text size, because white on --accent is 3.32:1 and clears AA at no smaller', () => {
+    render(<Button>Start</Button>);
+    const cls = screen.getByRole('button').className;
+    for (const token of ACCENT_SAFE_TYPE.split(' ')) expect(cls).toContain(token);
+  });
+
+  it('pins that safe type at 20px/700, the point where 3.32:1 becomes large text', () => {
+    expect(ACCENT_SAFE_TYPE).toBe('text-xl font-bold');
+  });
+
+  it('carries the 44px tap floor rather than trusting the caller to add it', () => {
+    render(<Button>Start</Button>);
+    expect(screen.getByRole('button').className).toContain('tap-target');
+  });
+
+  it('dims when disabled through a token pair, not opacity, which .read-far cannot reach', () => {
+    render(<Button disabled>Start</Button>);
+    const cls = screen.getByRole('button').className;
+    expect(cls).toContain('disabled:text-[var(--text-dim)]');
+    expect(cls).toContain('disabled:bg-[var(--surface-2)]');
+    // opacity composited the whole button to 2.11:1, an invisible control.
+    expect(cls).not.toMatch(/disabled:opacity/);
   });
 });
 
@@ -55,6 +79,29 @@ describe('Chip', () => {
     render(<Chip tone="pull" subtitle="back, biceps" onClick={() => {}}>Pull</Chip>);
     expect(screen.getByText('back, biceps').getAttribute('style')).toContain('var(--text-dim)');
   });
+
+  it('inks a selected chip with --fill-ink, the ink that is legal at subtitle size', () => {
+    // Not --accent-ink: white would be 3.32:1 on the accent and worse on
+    // several patterns, and this chip carries a subtitle. One rule, one token -
+    // see the note in globals.css and the matching assertion on the Kit screen.
+    render(<Chip tone="pull" subtitle="back, biceps" selected onClick={() => {}}>Pull</Chip>);
+    const chip = screen.getByRole('button');
+    expect(chip.getAttribute('style')).toContain('var(--fill-ink)');
+    expect(chip.getAttribute('style')).not.toContain('--accent-ink');
+    expect(screen.getByText('back, biceps').getAttribute('style')).toContain('var(--fill-ink)');
+  });
+
+  it('keeps the tint at 8%, above which the subtitle fails AA on the bright patterns', () => {
+    // 16% put --text-dim at 4.46:1 on --hinge. 8% measures 5.19:1.
+    expect(CHIP_TINT_PCT).toBeLessThanOrEqual(8);
+    render(<Chip tone="hinge" subtitle="glutes, hamstrings, back" onClick={() => {}}>Hinge</Chip>);
+    expect(screen.getByRole('button').getAttribute('style')).toContain(`${CHIP_TINT_PCT}%`);
+  });
+
+  it('carries the 44px tap floor rather than trusting the caller to add it', () => {
+    render(<Chip tone="core" onClick={() => {}}>Core</Chip>);
+    expect(screen.getByRole('button').className).toContain('tap-target');
+  });
 });
 
 describe('ProgressBar', () => {
@@ -87,5 +134,12 @@ describe('Ring', () => {
     render(<Ring value={0} max={0} label="Workouts this week" />);
     const ring = screen.getByRole('img', { name: 'Workouts this week: 0 of 0' });
     expect(ring.innerHTML).not.toContain('NaN');
+  });
+
+  it('announces the number it actually draws, never a count past the maximum', () => {
+    render(<Ring value={9} max={5} label="Workouts this week" />);
+    const ring = screen.getByRole('img', { name: 'Workouts this week: 5 of 5' });
+    expect(ring.textContent).toContain('5');
+    expect(ring.textContent).not.toContain('9');
   });
 });
