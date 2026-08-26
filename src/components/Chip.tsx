@@ -4,13 +4,34 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { Pattern } from '@/lib/types';
 
 /**
+ * How much of the pattern's own colour is washed into an unselected chip.
+ *
+ * This is a contrast budget, not a taste setting. The subtitle sits on this
+ * tint in --text-dim, and the brighter the wash the closer that gets to
+ * failing AA. Measured across all six patterns:
+ *
+ *   tint  worst --text-dim contrast
+ *   16%   4.46  (--hinge)   FAILS AA
+ *   12%   4.83  (--hinge)   passes, thin
+ *   10%   4.99  (--hinge)
+ *    8%   5.19  (--hinge)   <- chosen, real margin
+ *
+ * Raise this and the subtitle stops passing on the bright patterns first
+ * (hinge, squat, carry). `primitives.test.tsx` pins the number.
+ */
+export const CHIP_TINT_PCT = 8;
+
+/** How much of the pattern colour edges the chip. Border, so no text sits on it. */
+const CHIP_EDGE_PCT = 45;
+
+/**
  * A movement-pattern pill. `tone` is a Pattern rather than a string, so a typo
  * cannot silently resolve to var(--hing) and render an uncoloured chip.
  *
- * Unselected, the chip still carries a wash of its own colour, so the pattern
- * is identifiable before it is chosen. Selected, it fills solid and the ink
- * flips to --bg: dark ink on all six pattern colours clears AA (4.97:1 on the
- * worst of them, --pull).
+ * Unselected, the chip carries a wash of its own colour so the pattern is
+ * identifiable before it is chosen. Selected, it fills solid and the ink flips
+ * to --bg: dark ink on all six pattern colours clears AA, worst being --pull
+ * at 4.97:1.
  */
 export function Chip({
   children,
@@ -32,8 +53,8 @@ export function Chip({
         color: 'var(--bg)',
       }
     : {
-        backgroundColor: `color-mix(in oklab, var(--${tone}) 16%, var(--surface-2))`,
-        borderColor: `color-mix(in oklab, var(--${tone}) 45%, var(--border))`,
+        backgroundColor: `color-mix(in oklab, var(--${tone}) ${CHIP_TINT_PCT}%, var(--surface-2))`,
+        borderColor: `color-mix(in oklab, var(--${tone}) ${CHIP_EDGE_PCT}%, var(--border))`,
         color: 'var(--text)',
       };
 

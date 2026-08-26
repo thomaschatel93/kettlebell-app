@@ -64,6 +64,15 @@ body {
   min-width: var(--tap);
 }
 
+/*
+ * For a FIXED bottom bar. .app-shell pads the body, but a fixed element is out
+ * of normal flow and ignores that padding entirely, so the bottom tab bar needs
+ * the inset applied to itself or its last row sits under the home indicator.
+ */
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Keyboard focus stays visible. :where() keeps specificity at zero. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 3px solid var(--accent);

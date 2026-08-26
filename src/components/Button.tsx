@@ -4,6 +4,19 @@ import type { ButtonHTMLAttributes } from 'react';
 
 type Variant = 'primary' | 'ghost' | 'danger';
 
+/**
+ * The type size and weight the primary button may not go below.
+ *
+ * White on --accent measures 3.32:1. That clears WCAG AA only as *large text*
+ * (3:1, meaning >=18.66px bold); as normal text it needs 4.5:1 and fails. So
+ * 20px/700 is not a style choice, it is the thing keeping this button
+ * accessible, and `primitives.test.tsx` asserts the primary variant carries it.
+ *
+ * If a small label on --accent is ever needed, add a second ink token. Do not
+ * shrink this.
+ */
+export const ACCENT_SAFE_TYPE = 'text-xl font-bold';
+
 const STYLES: Record<Variant, string> = {
   primary: 'bg-[var(--accent)] text-[var(--accent-ink)]',
   ghost: 'bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]',
@@ -11,13 +24,21 @@ const STYLES: Record<Variant, string> = {
 };
 
 /**
+ * The disabled look, as a token pair rather than `opacity`.
+ *
+ * `opacity` composited the whole button against the page: white on --accent at
+ * 40% came out 2.11:1, an effectively invisible control on the workout screen,
+ * and opacity is the one dimming route `.read-far` cannot reach. Routed through
+ * --text-dim instead it measures 5.88:1, and inside `.read-far` the guard lifts
+ * it to 15.09:1.
+ */
+const DISABLED =
+  'disabled:bg-[var(--surface-2)] disabled:text-[var(--text-dim)] ' +
+  'disabled:border disabled:border-[var(--border)] disabled:cursor-not-allowed';
+
+/**
  * The one control the app is driven by, usually the only thing on screen the
  * user can reach mid-set.
- *
- * The label is fixed at 20px/700. That is not decoration: white on --accent
- * measures 3.3:1, which clears WCAG AA only at large-text size (>=18.66px
- * bold). Shrink the type and the primary button stops passing. It is also the
- * size a person reads from a metre away with a bell in the other hand.
  */
 export function Button({
   variant = 'primary',
@@ -31,8 +52,8 @@ export function Button({
       {...rest}
       type={type}
       className={`tap-target inline-flex items-center justify-center gap-2
-        rounded-[var(--radius)] px-6 py-4 text-xl font-bold leading-none tracking-tight
-        transition-opacity active:opacity-80 disabled:opacity-40
+        rounded-[var(--radius)] px-6 py-4 ${ACCENT_SAFE_TYPE} leading-none tracking-tight
+        transition-opacity active:opacity-80 ${DISABLED}
         ${fullWidth ? 'w-full' : ''} ${STYLES[variant]} ${className}`}
     />
   );
