@@ -22,10 +22,13 @@ const move = (
  * Three things follow from how `buildAncillary` uses this list:
  * - It shuffles the pool and takes whatever fits the budget, so no move may depend
  *   on another having come first. Each one stands alone.
- * - It takes only four to six of them. That is why there are TWO pulse raisers
+ * - It takes only four to six of them, so every move added to this list lowers the
+ *   odds of every other move appearing. That is why there are TWO pulse raisers
  *   rather than one: with a single raiser among seven moves, a warm-up of four
  *   missed it about two times in five, and a warm-up that never raises temperature
- *   is not a warm-up.
+ *   is not a warm-up. It is also the reason this list should not grow much further
+ *   without the block builder drawing by job rather than at random — measured
+ *   figures are in the task report.
  * - `seconds` is per side on the moves flagged unilateral, and the engine emits one
  *   checklist line per side. A stretch written as forty seconds across two sides is
  *   twenty seconds a side, which is not a hold, so the holds are thirty a side.
@@ -36,6 +39,12 @@ const move = (
  * shoulders and thoracic spine, then an unloaded rehearsal of each of the two
  * patterns the session will load: the squat and, above all, the hinge. Every static
  * hold sits in the cool-down, where it belongs.
+ *
+ * The five cool-down moves are one per job, and each is there because the session
+ * that precedes it loaded that tissue: hamstrings and hip flexors after the hinging,
+ * chest and front of the shoulder after the pressing, thoracic rotation after the
+ * single-arm work, and the lats and lower back after everything. Drop one and the
+ * cool-down stops covering something the session actually did.
  */
 export const ANCILLARY: Exercise[] = [
   move('marching-on-the-spot', 'Marching on the Spot', 'warmup', {
@@ -68,6 +77,11 @@ export const ANCILLARY: Exercise[] = [
     execution: ['Push the hips straight back and let the chest come forward.', 'Go until you feel the hamstrings, then drive the hips through to stand.', 'Keep the back flat from head to tailbone throughout.'],
     mistakes: ['Bending the knees and squatting instead of sending the hips back.', 'Lower back rounding at the bottom.', 'Chin poking forward so the neck leaves the line of the spine.'],
   }),
+  move('glute-bridge', 'Glute Bridge', 'warmup', {
+    setup: ['Lie on your back, knees bent, heels close to your hips.'],
+    execution: ['Push through the heels and lift the hips into one straight line.', 'Squeeze the glutes at the top, then lower slowly.'],
+    mistakes: ['Lower back arching instead of the glutes finishing the lift.', 'Pushing through the toes so the heels lift.'],
+  }),
   move('bodyweight-squat', 'Bodyweight Squat', 'warmup', {
     setup: ['Feet a little wider than your hips, toes turned out slightly.'],
     execution: ['Sit down between your hips with the chest tall.', 'Drive the knees out, then stand up.', 'Go a little deeper each rep.'],
@@ -93,6 +107,11 @@ export const ANCILLARY: Exercise[] = [
     execution: ['Walk the hands forward and let the chest sink towards the floor.', 'Breathe slowly into the back of the ribs.'],
     mistakes: ['Shoulders shrugging up around the ears.', 'Hips lifting off the heels.'],
   }),
+  move('seated-thoracic-twist', 'Seated Thoracic Twist', 'cooldown', {
+    setup: ['Sit cross-legged or on a chair with a long spine.'],
+    execution: ['Turn the ribs slowly to one side and hold there.', 'Keep the hips square and the shoulders level.'],
+    mistakes: ['Pulling on the knee to force the turn.', 'Hips sliding round with the shoulders.'],
+  }, 30, true),
   move('doorway-chest-stretch', 'Doorway Chest Stretch', 'cooldown', {
     setup: ['Forearm flat on a door frame, elbow at shoulder height.'],
     execution: ['Step through slowly until the chest opens.', 'Hold there and keep breathing.'],
