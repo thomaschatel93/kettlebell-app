@@ -13,7 +13,8 @@ import { nowMs, tick as readClock } from '@/lib/clock';
 import { ALL_EXERCISES } from '@/lib/data/ancillary';
 import { type ActiveState } from '@/lib/storage';
 import { appendHistory } from '@/lib/history-store';
-import type { Exercise, HistoryEntry, Step, WorkStep, Workout } from '@/lib/types';
+import { historyEntry } from '@/lib/record';
+import type { Exercise, Step, WorkStep } from '@/lib/types';
 import { useAudioCues } from '@/lib/useAudioCues';
 import { useWakeLock } from '@/lib/useWakeLock';
 
@@ -114,35 +115,6 @@ function roundLabel(steps: Step[], index: number): string {
 function movePosition(step: Step | undefined): string {
   if (step === undefined || step.kind !== 'work' || step.itemsInRound <= 1) return '';
   return `Move ${step.indexInRound} of ${step.itemsInRound}`;
-}
-
-/**
- * What the generator reads back to keep the next session varied: the distinct
- * Main-block moves he actually performed. Warm-up and cool-down are excluded
- * deliberately - they repeat by design and would drown the signal.
- */
-const mainExerciseIds = (steps: Step[]): string[] => [
-  ...new Set(
-    steps
-      .filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Main')
-      .map((s) => s.exerciseId),
-  ),
-];
-
-/**
- * `done` is the steps to credit him with, which is the whole list on Finish and
- * only what he got through when he ends early. The workout itself is stored
- * whole either way, so history can still show what the session was meant to be.
- */
-function historyEntry(workout: Workout, done: Step[], workedSeconds: number): HistoryEntry {
-  const at = readClock();
-  return {
-    id: `h-${at.seed}`,
-    createdAt: at.now,
-    workout,
-    mainExerciseIds: mainExerciseIds(done),
-    workedSeconds: Math.round(workedSeconds),
-  };
 }
 
 export function WorkoutRunner() {
@@ -357,7 +329,7 @@ export function WorkoutRunner() {
     // Appended through the shared store, not written straight to storage: the
     // Done screen mounts from this same store a moment later with no reload in
     // between, so a bare write would leave it showing the session before last.
-    appendHistory(historyEntry(state.workout, done, worked));
+    appendHistory(historyEntry(state.workout, done, worked, readClock()));
     publishActive(null);
     router.push('/workout/done');
   };

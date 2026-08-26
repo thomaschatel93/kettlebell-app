@@ -10,6 +10,7 @@ import { COMBOS } from '@/lib/data/combos';
 import { tick } from '@/lib/clock';
 import { generate } from '@/lib/generate';
 import { isKitHydrated, useKit } from '@/lib/kit-store';
+import { roundsText } from '@/lib/session';
 import { loadHistory } from '@/lib/storage';
 import type { Block, Format, WorkStep, Workout } from '@/lib/types';
 
@@ -123,10 +124,18 @@ export function WorkoutPreview() {
       now: at.now,
     });
     if (next.steps.length === 0) return;
-    setChanged(describeChange(w, next));
-    publishActive({
+
+    // The run screen reads this back OUT of storage, so a write that failed on
+    // quota or in private mode would leave him tapping Start into a runner with
+    // no workout in it. Setup says so when its write fails; this one used to
+    // throw the answer away and report the reroll as though it had landed.
+    const saved = publishActive({
       v: 1, workout: next, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null,
     });
+    setChanged(saved
+      ? describeChange(w, next)
+      : 'That reroll could not be saved - storage is full, or this is a private window. '
+        + 'The workout below is the one you still have.');
   };
 
   /**
@@ -191,9 +200,9 @@ export function WorkoutPreview() {
           <Card key={block} className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-lg font-bold tracking-tight">{block}</h2>
-              <p className="text-sm text-[var(--text-dim)]">
-                {rounds > 1 ? `${rounds} rounds` : 'once through'}
-              </p>
+              {/* The same words History uses, from the same function, so the
+                  two screens cannot come to describe one session differently. */}
+              <p className="text-sm text-[var(--text-dim)]">{roundsText(rounds)}</p>
             </div>
 
             <ol className="flex flex-col gap-2">

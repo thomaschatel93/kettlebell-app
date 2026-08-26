@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { buttonClass } from '@/components/Button';
+import { Button, buttonClass } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { PatternTag } from '@/components/Chip';
 import { Ring } from '@/components/Ring';
-import { isActiveHydrated, useActiveWorkout } from '@/lib/active-store';
+import { isActiveHydrated, publishActive, useActiveWorkout } from '@/lib/active-store';
+import { fileSession } from '@/lib/file-session';
+import { wasStarted } from '@/lib/record';
 import { nowMs } from '@/lib/clock';
 import { isHistoryHydrated, useHistory } from '@/lib/history-store';
 import { useKit } from '@/lib/kit-store';
@@ -143,10 +145,18 @@ export function HomeScreen() {
 
   const profile = kit.profiles.find((p) => p.id === kit.activeId) ?? kit.profiles[0];
 
-  const resume =
-    isActiveHydrated(active) && active !== null && isResumable(active.workout.createdAt, now)
-      ? active
-      : null;
+  const live = isActiveHydrated(active) ? active : null;
+  const resume = live !== null && isResumable(live.workout.createdAt, now) ? live : null;
+
+  /**
+   * A session too old to offer to resume, which he did some of.
+   *
+   * Before this it simply rotted: Home rightly stopped offering it after three
+   * hours, and nothing ever turned it into a record, so the work aged out of
+   * existence with no trace. It is his to decide now - filed, or thrown away on
+   * purpose - and either way something happens rather than nothing.
+   */
+  const orphan = live !== null && resume === null && wasStarted(live) ? live : null;
 
   const header = (
     <header className="flex items-baseline justify-between gap-3">
@@ -207,6 +217,20 @@ export function HomeScreen() {
         <Link href="/workout/run" className={buttonClass('ghost')}>
           Resume workout
         </Link>
+      )}
+
+      {orphan && (
+        <Card className="flex flex-col gap-3">
+          <div>
+            <p className="text-base font-bold">Unfinished session</p>
+            <p className="mt-1 text-sm text-[var(--text-dim)]">
+              {`Started ${dayText(orphan.workout.createdAt)}, ${minutesText(orphan.workedSeconds)} in. `}
+              {'Too long ago to pick back up - keep it, or throw it away.'}
+            </p>
+          </div>
+          <Button variant="ghost" onClick={() => fileSession(orphan)}>Save it to my history</Button>
+          <Button variant="danger" onClick={() => publishActive(null)}>Throw it away</Button>
+        </Card>
       )}
 
       <Link href="/workout" className={buttonClass()}>Start a workout</Link>

@@ -14,7 +14,10 @@ import { generate } from '@/lib/generate';
 import { resolveBell, uniqueWeights } from '@/lib/kit';
 import { isKitHydrated, useKit } from '@/lib/kit-store';
 import { coverablePatterns, filterCombos, filterPool } from '@/lib/pool';
-import { publishActive } from '@/lib/active-store';
+import { isActiveHydrated, publishActive, useActiveWorkout } from '@/lib/active-store';
+import { fileSession } from '@/lib/file-session';
+import { wasStarted } from '@/lib/record';
+import { minutesText } from '@/lib/session';
 import { publishPrefs, usePrefs } from '@/lib/prefs-store';
 import { loadHistory, type Prefs } from '@/lib/storage';
 import {
@@ -133,6 +136,15 @@ export function SetupForm() {
   const router = useRouter();
   const kit = useKit();
   const stored = usePrefs();
+  const liveState = useActiveWorkout();
+
+  /**
+   * A session that is still live. Generating a new workout writes over the
+   * active slot, so this screen has to know one is there BEFORE it does, and
+   * say so - the alternative is the state this app is not allowed to reach: a
+   * workout he did, deleted by a button that said nothing about it.
+   */
+  const live = isActiveHydrated(liveState) && liveState !== null && wasStarted(liveState) ? liveState : null;
 
   /**
    * The edits in progress, layered over what was last stored.
@@ -211,6 +223,12 @@ export function SetupForm() {
   const generateWorkout = () => {
     setProblem('');
     publishPrefs({ patterns: prefs.patterns, effort: prefs.effort, totalMinutes: prefs.totalMinutes });
+
+    // Before anything writes over the active slot: the session in it is filed
+    // as it stands, exactly as "End here" files a workout stopped halfway. It
+    // happens first so the work survives even if the generate below fails, and
+    // so the anti-repeat rule counts what he actually just did.
+    fileSession(live);
 
     // The clock and the seed are read at the tap, not inside `generate`, which
     // is what keeps the engine pure. One reading gives both.
@@ -361,6 +379,30 @@ export function SetupForm() {
         the page at the same moment as its text is unreliably announced.
       */}
       <div role="status" className="flex flex-col gap-3">
+        {/*
+          Said BEFORE the button that does it, not after. Generating writes over
+          the workout in progress, and the only honest place to tell him what
+          happens to it is above the control - a confirmation afterwards is a
+          question asked once the decision has already been taken.
+        */}
+        {live && (
+          <Note>
+            <p>
+              {`A workout is still in progress - ${minutesText(live.workedSeconds)} in. `}
+              {'Generating a new one files that session to your history as it stands, '}
+              {'so nothing you have done is lost.'}
+            </p>
+            <a
+              href="/workout/run"
+              className="tap-target inline-flex items-center self-start rounded-[var(--radius)]
+                border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-base font-bold
+                text-[var(--text)] transition-opacity active:opacity-80"
+            >
+              Resume it instead
+            </a>
+          </Note>
+        )}
+
         {hydrated && untrainable.length > 0 && (
           <Note>
             <p>

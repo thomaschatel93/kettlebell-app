@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { WorkoutPreview } from '@/components/WorkoutPreview';
 import { saveActive } from '@/lib/storage';
 import { generate } from '@/lib/generate';
@@ -36,5 +36,26 @@ describe('WorkoutPreview', () => {
     saveActive({ v: 1, workout: w, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null });
     render(<WorkoutPreview />);
     expect(screen.getByRole('status').textContent).toMatch(/not scaled|cut the press/i);
+  });
+});
+
+describe('a reroll that cannot be saved', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * The run screen reads the workout back OUT of storage. A reroll whose write
+   * failed on quota or in a private window used to report the change as though
+   * it had landed, leaving him to tap Start into a runner holding a workout he
+   * had already been told was replaced.
+   */
+  it('says so rather than reporting a change that did not happen', () => {
+    const w = build();
+    saveActive({ v: 1, workout: w, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null });
+    render(<WorkoutPreview />);
+
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    fireEvent.click(screen.getByRole('button', { name: /build a different one/i }));
+
+    expect(screen.getByRole('status').textContent).toMatch(/could not be saved/i);
   });
 });

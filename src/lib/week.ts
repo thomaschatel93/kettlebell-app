@@ -1,3 +1,4 @@
+import { sessionMinutes } from '@/lib/session';
 import type { HistoryEntry } from '@/lib/types';
 
 /**
@@ -58,6 +59,11 @@ export function trainedOnEachDay(history: HistoryEntry[], now: number): boolean[
   return weekDays(now).map((day) => trained.has(dayKey(day)));
 }
 
-/** Whole minutes, rounded once at the end rather than per entry. */
+/**
+ * Whole minutes, summed the way the History rows are read: each session rounded
+ * as that screen rounds it, then added. Rounding the raw total instead drifts
+ * from the rows by a minute or two, and a total that does not equal the numbers
+ * printed under it reads as a bug however defensible each half is.
+ */
 export const minutesOf = (entries: HistoryEntry[]): number =>
-  Math.round(entries.reduce((total, e) => total + e.workedSeconds, 0) / 60);
+  entries.reduce((total, e) => total + sessionMinutes(e.workedSeconds), 0);

@@ -21,9 +21,25 @@ export const FORMAT_LABEL: Record<Format, string> = {
 export const formatLabel = (entry: HistoryEntry): string =>
   FORMAT_LABEL[entry.workout?.format as Format] ?? 'Workout';
 
-/** Whole minutes. Under a minute is still "1 min" - he did do something. */
-export const minutesText = (seconds: number): string =>
-  `${seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : 0} min`;
+/**
+ * Whole minutes for one session. Under a minute is still 1 - he did do
+ * something - and the floor lives here rather than at each call site so the
+ * total on Home is the sum of the numbers the History rows actually show. Two
+ * different roundings of the same seconds is a bug to anyone reading the two
+ * screens together, whatever either one is doing on its own.
+ */
+export const sessionMinutes = (seconds: number): number =>
+  seconds > 0 ? Math.max(1, Math.round(seconds / 60)) : 0;
+
+export const minutesText = (seconds: number): string => `${sessionMinutes(seconds)} min`;
+
+/**
+ * How many times round. Written once and used by both Preview and History,
+ * because a session described as "5 rounds" before it starts and as eight moves
+ * afterwards is the same workout reported at a fifth of its real volume.
+ */
+export const roundsText = (rounds: number): string =>
+  rounds > 1 ? `${rounds} rounds` : 'once through';
 
 /** The distinct main-block moves, in the order he did them. */
 export const exerciseNames = (entry: HistoryEntry): string[] =>

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { HomeScreen } from '@/components/HomeScreen';
-import { pushHistory, saveKits, loadKits, saveActive } from '@/lib/storage';
+import { pushHistory, saveKits, loadKits, saveActive, loadActive, loadHistory } from '@/lib/storage';
 import { entry, req } from '../fixtures';
 import type { Step, Workout } from '@/lib/types';
 
@@ -113,5 +113,53 @@ describe('HomeScreen', () => {
   it('always offers a way to start a workout', () => {
     render(<HomeScreen />);
     screen.getByRole('link', { name: /start a workout/i });
+  });
+});
+
+/**
+ * The other end of the same hole. Resume rightly stops offering a session left
+ * more than three hours, but nothing used to turn it into a record, so the work
+ * aged quietly out of existence. It is his call now, and both answers do
+ * something.
+ */
+describe('HomeScreen and a session left too long', () => {
+  const stale = (workedSeconds = 300) =>
+    saveActive({ ...active(new Date(Date.now() - 5 * 3600e3).toISOString()), workedSeconds });
+
+  it('offers to keep it rather than letting it rot', () => {
+    stale();
+    render(<HomeScreen />);
+    expect(screen.getByText(/unfinished session/i)).toBeDefined();
+    screen.getByRole('button', { name: /save it to my history/i });
+  });
+
+  it('files it, with the work on it, when he says so', () => {
+    stale();
+    render(<HomeScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /save it to my history/i }));
+    expect(loadHistory()).toHaveLength(1);
+    expect(loadHistory()[0].workedSeconds).toBe(300);
+    expect(loadActive()).toBeNull();
+  });
+
+  it('throws it away only when he chooses to, and then really does', () => {
+    stale();
+    render(<HomeScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /throw it away/i }));
+    expect(loadHistory()).toHaveLength(0);
+    expect(loadActive()).toBeNull();
+  });
+
+  it('says nothing about a stale workout he never started', () => {
+    saveActive({ ...active(new Date(Date.now() - 5 * 3600e3).toISOString()), stepIndex: 0, workedSeconds: 0 });
+    render(<HomeScreen />);
+    expect(screen.queryByText(/unfinished session/i)).toBeNull();
+  });
+
+  it('offers nothing of the sort while the session is still resumable', () => {
+    saveActive(active(new Date().toISOString()));
+    render(<HomeScreen />);
+    expect(screen.queryByText(/unfinished session/i)).toBeNull();
+    screen.getByRole('link', { name: /resume/i });
   });
 });

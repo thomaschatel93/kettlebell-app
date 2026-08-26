@@ -5,7 +5,7 @@ import { buttonClass } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { PatternTag } from '@/components/Chip';
 import { isHistoryHydrated, useHistory } from '@/lib/history-store';
-import { FELT_LABEL, dayText, exerciseNames, formatLabel, minutesText, patternsOf } from '@/lib/session';
+import { FELT_LABEL, dayText, exerciseNames, formatLabel, minutesText, patternsOf, roundsText } from '@/lib/session';
 import type { HistoryEntry, WorkStep } from '@/lib/types';
 
 /**
@@ -24,13 +24,23 @@ import type { HistoryEntry, WorkStep } from '@/lib/types';
  * repaired record) falls back to the planned main block, which is the best
  * account of it that survives.
  */
-const firstRound = (entry: HistoryEntry): WorkStep[] => {
-  const main = (entry.workout?.steps ?? []).filter(
+const mainFirstRound = (entry: HistoryEntry): WorkStep[] =>
+  (entry.workout?.steps ?? []).filter(
     (s): s is WorkStep => s.kind === 'work' && s.block === 'Main' && s.round === 1,
   );
+
+const firstRound = (entry: HistoryEntry): WorkStep[] => {
+  const main = mainFirstRound(entry);
   if (entry.mainExerciseIds.length === 0) return main;
   return main.filter((s) => entry.mainExerciseIds.includes(s.exerciseId));
 };
+
+/**
+ * How many times he went round that list. Without it the row reads as one pass
+ * of eight moves - a thirty-minute session reported at a fifth of its volume,
+ * while Preview describes the same workout as five rounds.
+ */
+const mainRounds = (entry: HistoryEntry): number => mainFirstRound(entry)[0]?.totalRounds ?? 1;
 
 const prescription = (s: WorkStep): string =>
   s.reps !== undefined ? `${s.reps} reps` : s.seconds !== undefined ? `${s.seconds} sec` : '';
@@ -47,6 +57,7 @@ function Row({ entry }: { entry: HistoryEntry }) {
   const patterns = patternsOf(entry);
   const steps = firstRound(entry);
   const moves = exerciseNames(entry);
+  const rounds = mainRounds(entry);
 
   return (
     <Card className="p-0">
@@ -105,7 +116,13 @@ function Row({ entry }: { entry: HistoryEntry }) {
           </div>
         </summary>
 
-        <div className="border-t border-[var(--border)] p-5">
+        <div className="flex flex-col gap-3 border-t border-[var(--border)] p-5">
+          {steps.length > 0 && (
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-base font-bold tracking-tight">Main</h3>
+              <span className="text-sm text-[var(--text-dim)]">{roundsText(rounds)}</span>
+            </div>
+          )}
           {steps.length > 0 ? (
             <ul className="flex flex-col gap-2">
               {steps.map((s, i) => (

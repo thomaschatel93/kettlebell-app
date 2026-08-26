@@ -2,14 +2,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { HistoryScreen } from '@/components/HistoryScreen';
 import { DoneScreen } from '@/components/DoneScreen';
-import { pushHistory } from '@/lib/storage';
+import { WorkoutPreview } from '@/components/WorkoutPreview';
+import { pushHistory, saveActive } from '@/lib/storage';
 import { generate } from '@/lib/generate';
 import { ALL_EXERCISES } from '@/lib/data/ancillary';
 import { COMBOS } from '@/lib/data/combos';
 import { FULL_KIT, entry, req } from '../fixtures';
 import type { HistoryEntry, Step, WorkStep, Workout } from '@/lib/types';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/history' }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/history', useRouter: () => ({ push: vi.fn() }) }));
 
 const step: Step = {
   kind: 'work', exerciseId: 'two-hand-swing', name: 'Two-hand Swing', bellKg: 24, reps: 15,
@@ -142,5 +143,59 @@ describe('Done and History describe the same session', () => {
     const marker = document.querySelector('summary svg');
     expect(marker).not.toBeNull();
     expect(marker?.getAttribute('class')).toContain('group-open:-rotate-180');
+  });
+});
+
+/**
+ * Preview and History are the before and after of one session, and they were
+ * counting it differently: Preview said "5 rounds", History rendered a single
+ * round with no count at all, so a thirty-minute workout read afterwards as
+ * eight moves and about thirty reps. Both now take the words from the same
+ * function, which is the only thing that keeps two screens agreeing.
+ */
+describe('Preview and History describe the same session the same way', () => {
+  const build = () => generate({
+    request: req({ capability: 'intermediate', patterns: ['hinge', 'squat', 'push'], totalMinutes: 30 }),
+    kit: FULL_KIT, exercises: ALL_EXERCISES, combos: COMBOS, history: [],
+    now: '2026-08-25T09:00:00.000Z',
+  });
+
+  /** The rounds line beside a block heading, on either screen. */
+  const roundsBeside = (heading: string): string => {
+    const h = [...document.querySelectorAll('h2, h3')].find((n) => n.textContent === heading);
+    return h?.parentElement?.querySelector('span, p')?.textContent?.trim() ?? '';
+  };
+
+  it('agrees on how many times round he went', () => {
+    const w = build();
+    const mainSteps = w.steps.filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Main');
+    const rounds = mainSteps[0].totalRounds;
+
+    saveActive({ v: 1, workout: w, stepIndex: 0, workedSeconds: 0, restEndsAt: null, pausedRemainingMs: null });
+    const preview = render(<WorkoutPreview />);
+    const onPreview = roundsBeside('Main');
+    preview.unmount();
+
+    pushHistory(entry({
+      id: 'a', workout: w, workedSeconds: 1800,
+      mainExerciseIds: [...new Set(mainSteps.map((s) => s.exerciseId))],
+    }));
+    render(<HistoryScreen />);
+    fireEvent.click(screen.getByText(/25 Aug/));
+    const onHistory = roundsBeside('Main');
+
+    expect(onPreview).toBe(onHistory);
+    expect(onHistory).toBe(rounds > 1 ? `${rounds} rounds` : 'once through');
+  });
+
+  it('does not leave a history row reading as one pass of a multi-round session', () => {
+    const w = build();
+    const mainSteps = w.steps.filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Main');
+    expect(mainSteps[0].totalRounds).toBeGreaterThan(1);
+
+    pushHistory(entry({ id: 'a', workout: w, mainExerciseIds: [...new Set(mainSteps.map((s) => s.exerciseId))] }));
+    render(<HistoryScreen />);
+    fireEvent.click(screen.getByText(/25 Aug/));
+    expect(screen.getByText(new RegExp(`${mainSteps[0].totalRounds} rounds`))).toBeDefined();
   });
 });
