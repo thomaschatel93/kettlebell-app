@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { EXERCISES, byId } from '@/lib/data/exercises';
 import { PATTERNS, CAPABILITIES } from '@/lib/types';
+import { filterPool } from '@/lib/pool';
+import { HOME_KIT, req } from './fixtures';
 
 describe('main exercise database', () => {
-  it('holds the 29 main exercises', () => {
-    expect(EXERCISES).toHaveLength(29);
+  it('holds the 34 main exercises', () => {
+    // 15 sliced from the grid + 14 from batch 2 + 5 added in review to keep a
+    // single-bell beginner real choice in every pattern.
+    expect(EXERCISES).toHaveLength(34);
   });
 
   it('has unique kebab-case ids', () => {
@@ -53,6 +57,23 @@ describe('main exercise database', () => {
     }
   });
 
+  /**
+   * The count that actually matters. A raw three-per-pattern says nothing about
+   * what a person can train, because `filterPool` drops two-bell and bench
+   * movements and everything above their capability. On the most likely everyday
+   * kit — one bell, no bench, beginner — pull and carry once collapsed to a
+   * single candidate each, which makes a thirty-minute pull session sixteen reps
+   * of one exercise. Two is the floor asserted here; the database currently
+   * carries three or more everywhere.
+   */
+  it('leaves a beginner on a single bell with no bench real choice in every pattern', () => {
+    const request = req({ kitProfileId: 'home', capability: 'beginner', patterns: [...PATTERNS] });
+    const pool = filterPool(EXERCISES, request, HOME_KIT);
+    for (const p of PATTERNS) {
+      expect(pool.filter((e) => e.patterns.includes(p)).length, p).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it('marks none of them as ancillary', () => {
     for (const e of EXERCISES) {
       expect(e.warmupSuitable).toBe(false);
@@ -83,6 +104,28 @@ describe('main exercise database', () => {
   it('includes all three carries', () => {
     for (const id of ['farmers-carry', 'suitcase-carry', 'racked-carry']) {
       expect(byId(id), id).toBeDefined();
+    }
+  });
+
+  it('names no knee-past-toes mistake, which is a myth and not the injury', () => {
+    for (const e of EXERCISES) {
+      for (const m of e.cues.mistakes) {
+        expect(m.toLowerCase(), e.id).not.toMatch(/past the toes/);
+      }
+    }
+  });
+
+  it('names the valgus error on every lunge and split squat', () => {
+    for (const id of ['front-lunge', 'reverse-lunge', 'bulgarian-split-squat']) {
+      const mistakes = byId(id)?.cues.mistakes.join(' ').toLowerCase();
+      expect(mistakes, id).toMatch(/caving inwards/);
+    }
+  });
+
+  it('names lumbar rounding on both swings, the primary injury for each', () => {
+    for (const id of ['two-hand-swing', 'single-arm-swing']) {
+      const mistakes = byId(id)?.cues.mistakes.join(' ').toLowerCase();
+      expect(mistakes, id).toMatch(/lower back round|rounding the lower back/);
     }
   });
 

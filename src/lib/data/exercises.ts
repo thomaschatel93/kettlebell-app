@@ -1,19 +1,31 @@
 import type { Exercise } from '@/lib/types';
 
 /**
- * The 29 main bell exercises: the 15 kept from the supplied illustration grid
- * plus the 14 of batch 2 in `docs/image-brief.md`. Front Raise is dropped.
+ * The 34 main bell exercises: the 15 kept from the supplied illustration grid,
+ * the 14 of batch 2 in `docs/image-brief.md`, and 5 added in review. Front Raise
+ * is dropped.
+ *
+ * The 5 added ones exist because a raw count of three candidates per pattern is
+ * not the count that matters. On a single-bell kit with no bench, `filterPool`
+ * drops every two-bell and bench movement, and the capability filter drops more
+ * still; pull and carry each collapsed to one candidate, which makes a
+ * thirty-minute pull session one exercise repeated. The number to hold is three
+ * candidates per pattern AFTER filtering for a beginner on one bell, and
+ * `tests/data-exercises.test.ts` now guards it.
  *
  * Cue rules, because a wrong cue teaches an injury:
- * - `mistakes` is the only part always on screen, including for the 14 with no
- *   picture, so every entry names an observable error, not an instruction.
+ * - `mistakes` is the only part always on screen, including for the exercises
+ *   with no picture, so every entry names an observable error, not an
+ *   instruction.
  * - Nothing is padded to three. Two accurate cues beat three with filler.
+ * - No knee-past-toes cue anywhere. Knees travel past the toes in any honest
+ *   lunge; the error worth naming is the knee caving inwards.
  *
  * Numeric rules, because Task 14 drives the engine from this file:
  * - Ballistics are roughly 2s a rep, grinds roughly 4s, carries are timed and
  *   carry `secondsPerRep: 0`.
  * - Exactly one of `defaultReps` or `defaultWorkSeconds` is ever set.
- * - `image` is null for all 29; Task 16 fills in the sliced ones.
+ * - `image` is null for all 34; Task 16 fills in the sliced ones.
  */
 export const EXERCISES: Exercise[] = [
   {
@@ -123,7 +135,7 @@ export const EXERCISES: Exercise[] = [
     cues: {
       setup: ['Hold the bell at your chest, elbows tucked in.', 'Stand tall with your feet under your hips.'],
       execution: ['Step forward and lower the back knee towards the floor.', 'Keep the torso upright and the weight through the front heel.', 'Push off the front foot to return to standing.'],
-      mistakes: ['Front knee drifting well past the toes.', 'Crashing the back knee into the floor.', 'Chest folding over the front thigh.'],
+      mistakes: ['Front knee caving inwards instead of tracking over the toes.', 'Crashing the back knee into the floor.', 'Chest folding over the front thigh.'],
     },
   },
   {
@@ -167,7 +179,7 @@ export const EXERCISES: Exercise[] = [
     cues: {
       setup: ['Bell a forearm’s length in front of your toes.', 'Grip with one hand, free arm loose at your side.'],
       execution: ['Hike the bell back past your knees.', 'Snap the hips through and stand tall.', 'Resist the twist so both hips stay facing forward.'],
-      mistakes: ['Working shoulder rounding forward at the bottom.', 'Torso rotating to follow the bell.', 'Wrist bending back so the bell hangs off the hand.'],
+      mistakes: ['Lower back rounding as you hike the bell between the legs.', 'Working shoulder rounding forward at the bottom.', 'Torso rotating to follow the bell.', 'Wrist bending back so the bell hangs off the hand.'],
     },
   },
   {
@@ -321,7 +333,7 @@ export const EXERCISES: Exercise[] = [
     cues: {
       setup: ['Hold the bell at your chest, elbows tucked in.', 'Stand tall with your feet under your hips.'],
       execution: ['Step straight back and lower the back knee towards the floor.', 'Keep the weight in the front heel and the torso upright.', 'Drive through the front foot to stand back up.'],
-      mistakes: ['Stepping back onto a narrow line, so you wobble sideways.', 'Chest folding forward over the front knee.', 'Bouncing the back knee off the floor.'],
+      mistakes: ['Front knee caving inwards as you drive back up.', 'Chest folding forward over the front knee.', 'Stepping back onto a narrow line, so you wobble sideways.', 'Bouncing the back knee off the floor.'],
     },
   },
   {
@@ -504,7 +516,7 @@ export const EXERCISES: Exercise[] = [
     id: 'racked-carry',
     name: 'Racked Carry',
     patterns: ['carry', 'core'],
-    capability: 'intermediate',
+    capability: 'beginner',
     mechanic: 'carry',
     unilateral: true,
     bells: 1,
@@ -517,7 +529,7 @@ export const EXERCISES: Exercise[] = [
     image: null,
     imagePanels: 1,
     cues: {
-      setup: ['Clean one bell into the rack, forearm vertical against the ribs.', 'Elbow tight to the body, wrist straight.'],
+      setup: ['Bring one bell into the rack with both hands, forearm vertical against the ribs.', 'Elbow tight to the body, wrist straight.'],
       execution: ['Walk tall with short, quiet steps.', 'Keep the elbow glued to the ribs.', 'Breathe steadily behind a braced middle.'],
       mistakes: ['Elbow drifting away from the ribs as you tire.', 'Leaning back to counterbalance the bell.', 'Wrist folding back so the bell rests on the back of the hand.'],
     },
@@ -629,7 +641,7 @@ export const EXERCISES: Exercise[] = [
     cues: {
       setup: ['Rest the rear foot on a bench behind you, laces down.', 'Bell in the rack on one side, front foot far enough forward to stack the knee over the ankle.'],
       execution: ['Lower straight down until the front knee is at about ninety degrees.', 'Keep the torso upright and the weight in the front heel.', 'Drive through the front foot to stand.'],
-      mistakes: ['Front foot set too close, so the knee travels well past the toes.', 'Front knee caving inwards under load.', 'Hips twisting towards the racked side.'],
+      mistakes: ['Front knee caving inwards under load.', 'Front heel lifting because the front foot is set too close.', 'Hips twisting towards the racked side.'],
     },
   },
   {
@@ -652,6 +664,116 @@ export const EXERCISES: Exercise[] = [
       setup: ['Feet a little wider than your hips in an athletic stance.', 'Hinge back with a flat back, bell in one hand in front of you.'],
       execution: ['Pass the bell backwards between your legs.', 'Meet it with the other hand behind the knee and bring it round the outside.', 'Stay hinged with a flat back the whole way through.'],
       mistakes: ['Standing too upright, so the bell clips the thighs.', 'Back rounding to reach the hand-off.', 'Head dropping to watch the bell instead of keeping the neck long.'],
+    },
+  },
+  {
+    id: 'goblet-carry',
+    name: 'Goblet Carry',
+    patterns: ['carry', 'core'],
+    capability: 'beginner',
+    mechanic: 'carry',
+    unilateral: false,
+    bells: 1,
+    loadBand: 'moderate',
+    secondsPerRep: 0,
+    defaultWorkSeconds: 40,
+    needsBench: false,
+    warmupSuitable: false,
+    cooldownSuitable: false,
+    image: null,
+    imagePanels: 1,
+    cues: {
+      setup: ['Hold the bell by the horns at chest height, elbows tucked in.', 'Stand tall with the ribs down and the shoulders back.'],
+      execution: ['Walk with short, quiet steps.', 'Keep the bell against the chest rather than letting it drift out in front.', 'Breathe steadily behind a braced middle.'],
+      mistakes: ['Bell drifting away from the chest, so the lower back arches to hold it.', 'Shoulders rounding forward around the bell.', 'Holding the breath instead of breathing behind the brace.'],
+    },
+  },
+  {
+    id: 'overhead-carry',
+    name: 'Overhead Carry',
+    patterns: ['carry', 'core'],
+    capability: 'intermediate',
+    mechanic: 'carry',
+    unilateral: true,
+    bells: 1,
+    loadBand: 'light',
+    secondsPerRep: 0,
+    defaultWorkSeconds: 30,
+    needsBench: false,
+    warmupSuitable: false,
+    cooldownSuitable: false,
+    image: null,
+    imagePanels: 1,
+    cues: {
+      setup: ['Press one bell overhead and lock the elbow, wrist in line with the forearm.', 'Shoulder packed down, ribs down, free arm out for balance.'],
+      execution: ['Walk with short, quiet steps, the arm staying vertical over the shoulder.', 'Keep the elbow locked and the upper arm close to your ear.', 'Look forward, not up at the bell.'],
+      mistakes: ['Elbow softening so the bell drifts behind the head.', 'Ribs flaring and the lower back arching to keep the arm up.', 'Shoulder shrugging towards the ear instead of staying packed down.'],
+    },
+  },
+  {
+    id: 'dead-row',
+    name: 'Dead Row',
+    patterns: ['pull'],
+    capability: 'beginner',
+    mechanic: 'grind',
+    unilateral: true,
+    bells: 1,
+    loadBand: 'moderate',
+    secondsPerRep: 4,
+    defaultReps: 8,
+    needsBench: false,
+    warmupSuitable: false,
+    cooldownSuitable: false,
+    image: null,
+    imagePanels: 1,
+    cues: {
+      setup: ['Bell on the floor just outside the foot on the working side.', 'Hinge back with a flat back until the torso is near parallel with the floor, free hand on your thigh.'],
+      execution: ['Take the grip, then pull the bell to your ribs with the elbow tracking back.', 'Set it down on the floor and let it settle before the next rep.', 'Reset the hinge and the flat back each time.'],
+      mistakes: ['Lower back rounding to reach down for the bell.', 'Standing up a little to start the pull instead of holding the hinge.', 'Torso twisting to help the bell up.'],
+    },
+  },
+  {
+    id: 'floor-pullover',
+    name: 'Floor Pullover',
+    patterns: ['pull', 'core'],
+    capability: 'beginner',
+    mechanic: 'grind',
+    unilateral: false,
+    bells: 1,
+    loadBand: 'light',
+    secondsPerRep: 4,
+    defaultReps: 10,
+    needsBench: false,
+    warmupSuitable: false,
+    cooldownSuitable: false,
+    image: null,
+    imagePanels: 1,
+    cues: {
+      setup: ['Lie on your back with the knees bent and the feet flat.', 'Hold the bell by the horns with both hands over your chest, arms straight and the elbows soft.'],
+      execution: ['Press the lower back into the floor and keep it there.', 'Take the bell back over your head only as far as the ribs stay down.', 'Pull it back over the chest with the lats, the elbows staying where they are.'],
+      mistakes: ['Ribs lifting and the lower back arching off the floor as the bell travels back.', 'Chasing more range than the shoulders will give.', 'Elbows bending and straightening, so it turns into a press.'],
+    },
+  },
+  {
+    id: 'half-kneeling-press',
+    name: 'Half-Kneeling Press',
+    patterns: ['push', 'core'],
+    capability: 'beginner',
+    mechanic: 'grind',
+    unilateral: true,
+    bells: 1,
+    loadBand: 'light',
+    secondsPerRep: 4,
+    defaultReps: 6,
+    needsBench: false,
+    warmupSuitable: false,
+    cooldownSuitable: false,
+    image: null,
+    imagePanels: 1,
+    cues: {
+      setup: ['Kneel on the knee on the same side as the bell, the other foot flat in front, both knees at about ninety degrees.', 'Bring the bell into the rack with both hands: forearm vertical, elbow tight to the ribs, wrist straight.'],
+      execution: ['Squeeze the back glute and draw the ribs down before you press.', 'Press straight up with the wrist in line with the forearm.', 'Finish with the arm by your ear, then lower under control to the rack.'],
+      mistakes: ['Ribs flaring and the lower back arching to get the bell up.', 'Torso side-bending away from the bell.', 'Wrist bending back under the bell.'],
     },
   },
 ];
