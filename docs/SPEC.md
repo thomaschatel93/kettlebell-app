@@ -353,7 +353,7 @@ Preview, Workout, Rest and Done are the five stages of the Workout tab.
 circles and leg swings do not each need a full screen, an image and a Next button.
 One-exercise-per-screen is reserved for the main block, where it earns its place.
 
-This is also why the twelve bodyweight ancillary stills were cut. Without it, every
+This is also why the fourteen bodyweight ancillary stills were cut. Without it, every
 session would open with three to seven minutes of empty placeholders, and first
 impressions of the app would be formed entirely from the part that was
 deprioritised.
@@ -392,6 +392,16 @@ For an exercise with no picture the words are the entire content, and they shoul
 not sit under a large empty rectangle. The layout differing between illustrated
 and unillustrated exercises is fine; this is one app for one person, not a design
 system.
+
+**Inside a complex, suppress the set-up cues.** A chain member's `setup` lines are
+written for performing that exercise on its own, and they are wrong mid-chain: the
+clean says "Bell just outside the foot on the working side… take the grip", but in
+`clean-press-squat` the bell arrives from the previous front squat and never touches
+the floor until the chain ends. Show `setup` only for the FIRST step of a chain, and
+only on its first round; every later step, and the whole second side of a per-side
+chain, shows `execution` and `mistakes` alone. The data stays as it is — those cues
+are correct for the standalone exercise, so it is the card that has to know where it
+is being shown.
 
 ### 5.5 Pause
 

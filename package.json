@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "media:slice": "tsx scripts/slice-grid.mts",
+    "media:import": "tsx scripts/import-stills.mts",
+    "media:todo": "tsx scripts/check-media.mts",
     "test": "vitest run",
     "test:watch": "vitest",
     "pretypecheck": "next typegen",
@@ -29,7 +32,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "jsdom": "^29.1.1",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }

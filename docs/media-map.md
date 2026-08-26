@@ -55,3 +55,73 @@ Separately, outside Batch 2: the Batch 1 note that **Clean and Press** and **Sna
 - **`a-single-athletic-male-figure--short-brown-hair--b (10).png`** (candidate Kettlebell Clean) — the gripping hand appears to wrap around the round ball of the bell rather than the handle, and the elbow is flared out and raised near the face instead of tucked vertically against the ribs. This is the specific "elbow flared away from the ribs" mistake the app already warns about in its own cue text for this exercise — regenerate rather than ship.
 
 No other image showed a rounded lower back under load, a bent wrist under load, an extra/missing limb, a malformed hand, or a bell that isn't actually being held by its handle.
+
+## Grid cells not shipped, and why
+
+These come off the two sheets in `media-source/`, not from the individual stills,
+so they are outside the "Do not ship" list above — that one names filenames and
+these are cells. `scripts/slice-grid.mts` carries `null` for each, with the same
+reason written beside the id.
+
+| Sheet, cell | Intended exercise | Why it does not ship |
+|---|---|---|
+| grid-01, cell 4 | `clean-and-press` | The figure holds **two** bells, one pressed overhead and one racked with the elbow away from the ribs. The lift is one bell, single-arm, and its cues say to spear one hand through the handle. |
+| grid-01, cell 12 | Front Raise | Dropped from the app: not real kettlebell programming. |
+| grid-02, cell 2 | `clean`, front view | Not a fault, just second best. Only one file can be `clean.webp`, and the side view in cell 1 shows what the cue asks for: forearm vertical against the ribs, elbow tucked, wrist straight. |
+| grid-02, cell 4 | `high-pull` | Drawn with **both** hands on the handle and both elbows flared wide. The lift is one bell, unilateral, and its cues say one hand on the handle with the free arm out of the way. |
+| grid-02, cell 11 | `floor-pullover` | **Both palms are splayed flat on the round BALL of the bell, with the handle hanging unused below it.** The exercise's own setup cue reads "hold the bell by the horns with both hands", so the picture contradicts its own caption — and a still was already banned from this app for the same fault (see "Do not ship"). A regeneration must be checked against this line before it ships: **both hands on the horns of the handle, never on the ball**, elbows soft, ribs down. Two panels: the bell over the chest, and the far end of the range. |
+
+## Notes on pictures that do ship
+
+- **`bent-over-row`** — the picture braces the free hand on a **bench**, but the
+  exercise declares `needsBench: false` and that is correct: a bent-over row needs
+  a hinge and a free hand on the thigh, which is what its own setup cue says. The
+  data is not changed to match the drawing. If the bench in the picture ever reads
+  as a requirement to a user, the fix is a new picture with the free hand on the
+  thigh, not a new flag on the exercise.
+- **`racked-front-squat`** — the shorts are drawn with an odd sweeping loop around
+  the left hip that reads as a stray shape rather than a garment. It is an artwork
+  wobble in the source still, not a form fault: the grip, the rack, the depth and
+  the knee tracking are all right, so it ships. Worth replacing if the still is
+  ever regenerated.
+
+## What the dark-background conversion costs
+
+Turning the white source sheets into dark card images means deciding which enclosed
+white regions are background and which are part of the drawing. The rule fills any
+enclosed light region whose colour matches the exterior and which sits further from
+the exterior than the outline is thick. It deliberately ignores region SIZE — an
+earlier version used an area threshold and shipped nine tiles with white pockets in
+them, because a real background pocket can be as small as 0.1% of the image.
+
+The cost is that a flat white detail fully enclosed by the figure is treated as
+background. Five tiles lost decoration this way:
+
+| Tile | What it lost |
+|---|---|
+| `single-leg-deadlift` | the white shorts stripe, entirely (758px) |
+| `floor-press` | the shorts stripe (1084px) and the ankle sock, now dark grey (1412px) |
+| `racked-front-squat` | the lower two-thirds of the white hip crescent (715px) |
+| `turkish-get-up` | the LEFT panel's stripe (475px); the right panel keeps its own |
+| `farmers-carry` | a thin sliver (162px) |
+
+All 24 grid tiles keep their stripes, so the seam is two stills in plain black shorts
+beside 24 striped ones, plus the get-up disagreeing with itself panel to panel.
+
+**The trade-off is deliberate and it is the right way round.** The alternative is
+white pockets inside the figures, which is far more visible on a dark card than a
+missing stripe. Judgement on the get-up mismatch: not worth regenerating. The stripe
+is a few pixels at the size the card actually displays, and the two figures differ in
+pose and scale anyway, so the eye does not read them as a matched pair.
+
+**If you regenerate any of these images**, know that a flat white detail fully
+enclosed by the figure will be removed. Ask for the stripes to carry a thin outline
+and they will survive.
+
+## Notes on pictures that do ship
+
+- `bent-over-row` shows a bench, but the exercise declares `needsBench: false` and
+  that is correct — the movement needs no bench. Benchless users will see equipment
+  they do not have. Cosmetic; regenerate when convenient.
+- `racked-front-squat` has an odd loop on the shorts. An artwork wobble in the
+  source, not a form fault.

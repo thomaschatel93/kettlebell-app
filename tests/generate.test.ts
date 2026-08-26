@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '@/lib/generate';
 import { capabilityRank, type Capability, type Format, type Pattern, type WorkStep, type WorkoutRequest } from '@/lib/types';
-import { FIXTURE_EXERCISES, FIXTURE_COMBOS, FULL_KIT, HOME_KIT, combo, entry, req } from './fixtures';
-import type { Combo, HistoryEntry, KitProfile } from '@/lib/types';
+import { FIXTURE_EXERCISES, FIXTURE_COMBOS, FULL_KIT, HOME_KIT, combo, entry, ex, req } from './fixtures';
+import type { Combo, Exercise, HistoryEntry, KitProfile } from '@/lib/types';
 
 const NOW = '2026-08-25T09:00:00.000Z';
 const ALL: Pattern[] = ['hinge', 'squat', 'push', 'pull', 'carry', 'core'];
@@ -204,8 +204,13 @@ describe('generate: the anti-repeat retry', () => {
       steps: [{ exerciseId: 'f-clean', reps: 5 }, { exerciseId: 'f-lunge', reps: 5 }] }),
   ];
 
+  // Fifteen minutes, not the default thirty. Complex rounds are capped at six, and
+  // two chains this short cannot fill half an hour on their own, so at thirty minutes
+  // every seed lands on both of them and there is nothing for the retry to swap TO.
+  // The assertion below is unchanged; only the session is short enough that a
+  // one-chain plan is a real candidate, which is what makes the retry observable.
   const complexRun = (seed: number, history: HistoryEntry[] = []) => generate({
-    request: req({ capability: 'advanced', format: 'complex', patterns: ['hinge', 'squat'], seed }),
+    request: req({ capability: 'advanced', format: 'complex', patterns: ['hinge', 'squat'], seed, totalMinutes: 15 }),
     kit: FULL_KIT, exercises: FIXTURE_EXERCISES, combos: DISJOINT, history, now: NOW,
   });
 
@@ -305,6 +310,109 @@ describe('generate: determinism and variety', () => {
     const second = run({ seed: 12, format: 'circuit' }, FULL_KIT, history);
     const nextIds = [...new Set(mainWork(second).map((s) => s.exerciseId))].sort();
     expect(nextIds).not.toEqual(mainIds);
+  });
+});
+
+describe('generate: complexes are performable', () => {
+  /**
+   * The chain must run whole down one side and then the other. Expanding each step
+   * into left and right in place gives Clean L, Clean R, Press L, Press R: after the
+   * second clean the bell is in the wrong hand, so the press cannot start without
+   * putting it down, which is the one thing a complex forbids.
+   */
+  const PER_SIDE: Combo[] = [
+    combo('c-per-side', { capability: 'intermediate', loadBand: 'light', perSide: true, steps: [
+      { exerciseId: 'f-sldl', reps: 3 }, { exerciseId: 'f-press', reps: 3 }, { exerciseId: 'f-lunge', reps: 3 },
+    ] }),
+  ];
+
+  const perSideRun = () => generate({
+    request: req({ capability: 'advanced', format: 'complex', patterns: ['hinge', 'squat', 'push'], seed: 4 }),
+    kit: FULL_KIT, exercises: FIXTURE_EXERCISES, combos: PER_SIDE, history: [], now: NOW,
+  });
+
+  it('runs a per-side chain whole on one side, then whole on the other', () => {
+    const round = mainWork(perSideRun()).filter((s) => s.round === 1);
+    expect(round.map((s) => `${s.exerciseId}:${s.side}`)).toEqual([
+      'f-sldl:left', 'f-press:left', 'f-lunge:left',
+      'f-sldl:right', 'f-press:right', 'f-lunge:right',
+    ]);
+  });
+
+  it('never changes hands within one pass of a chain', () => {
+    const round = mainWork(perSideRun()).filter((s) => s.round === 1);
+    const sides = round.map((s) => s.side);
+    // One change of side across the whole round, at the halfway point, and no other.
+    expect(sides.filter((v, i) => i > 0 && v !== sides[i - 1])).toHaveLength(1);
+  });
+
+  /**
+   * Members were looked up in the filtered pool, so a member whose pattern was not
+   * requested vanished from the chain while the combo kept the load band chosen for
+   * it: "Clean, Press, Squat" shipped without the press and squatted at press weight.
+   */
+  it('keeps every member of a chain even when its pattern was not requested', () => {
+    const w = generate({
+      request: req({ capability: 'advanced', format: 'complex', patterns: ['hinge'], seed: 4 }),
+      kit: FULL_KIT, exercises: FIXTURE_EXERCISES, combos: PER_SIDE, history: [], now: NOW,
+    });
+    const ids = new Set(mainWork(w).map((s) => s.exerciseId));
+    expect([...ids].sort()).toEqual(['f-lunge', 'f-press', 'f-sldl']);
+  });
+
+  it('never prescribes more than six rounds of a complex', () => {
+    for (const totalMinutes of [15, 20, 30, 45, 60] as const) {
+      const w = run({ format: 'complex', totalMinutes, patterns: ALL, seed: totalMinutes });
+      const first = mainWork(w)[0];
+      if (first) expect(first.totalRounds, `${totalMinutes}min`).toBeLessThanOrEqual(6);
+    }
+  });
+});
+
+describe('generate: ancillary essentials', () => {
+  /**
+   * Dataset-independent. The real guarantee is pinned against the real moves in
+   * tests/data-ancillary.test.ts; this pins the mechanism that delivers it, so the
+   * engine keeps working if the ancillary list is ever replaced wholesale.
+   */
+  const anc = (id: string, over: Partial<Exercise> = {}) => ex(id, {
+    patterns: ['core'], bells: 0, secondsPerRep: 0,
+    defaultReps: undefined, defaultWorkSeconds: 30, ...over,
+  });
+  const WITH_ESSENTIAL = [
+    ...FIXTURE_EXERCISES,
+    anc('w-must', { warmupSuitable: true, essentialJob: 'the one that matters' }),
+  ];
+  const warmIds = (exercises: Exercise[], seed: number) => {
+    const w = generate({
+      request: req({ capability: 'advanced', seed }), kit: FULL_KIT,
+      exercises, combos: FIXTURE_COMBOS, history: [], now: NOW,
+    });
+    return new Set(w.steps
+      .filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Warm-up')
+      .map((s) => s.exerciseId));
+  };
+
+  it('draws the essential move into every warm-up that has room', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const ids = warmIds(WITH_ESSENTIAL, seed);
+      if (ids.size < 2) continue;
+      expect(ids.has('w-must'), `seed ${seed}`).toBe(true);
+    }
+  });
+
+  it('still builds a block when nothing in the pool is essential', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      expect(warmIds(FIXTURE_EXERCISES, seed).size).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not overrun the budget to fit an essential in', () => {
+    // Every ancillary move here costs 30s against a 180s warm-up budget, so an
+    // essential takes a slot, it does not add one.
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(warmIds(WITH_ESSENTIAL, seed).size).toBeLessThanOrEqual(warmIds(FIXTURE_EXERCISES, seed).size + 1);
+    }
   });
 });
 

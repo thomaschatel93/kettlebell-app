@@ -1,7 +1,7 @@
 import type {
   Combo, Exercise, Format, HistoryEntry, KitProfile, Pattern, Workout, WorkoutRequest,
 } from '@/lib/types';
-import { createRng, shuffle } from '@/lib/rng';
+import { createRng, pick, shuffle, type Rng } from '@/lib/rng';
 import { isUnderSpecified } from '@/lib/kit';
 import { cooldownPool, filterCombos, filterPool, warmupPool } from '@/lib/pool';
 import { budget } from '@/lib/budget';
@@ -46,7 +46,13 @@ const streamSeed = (seed: number, count: number): number => (Math.imul(seed, 0x9
 const SEARCH: Record<Format, { counts: number[]; rounds: number[] }> = {
   circuit:  { counts: [3, 4, 5, 6, 7, 8], rounds: range(1, 12) },
   strength: { counts: [3, 4, 5],       rounds: range(2, 6) },
-  complex:  { counts: [1, 2],          rounds: range(1, 12) },
+  // A complex is capped at six rounds, and may chain up to three complexes per round
+  // instead. The search will happily stack twelve rounds of one short chain to fill a
+  // long budget, and ten rounds of cleans and presses is not a prescription any coach
+  // would write. Length now comes from the item count first and the rounds second,
+  // which is the way round a coach would write it; where neither reaches the budget,
+  // `shortOfBudget` says so honestly.
+  complex:  { counts: [1, 2, 3],       rounds: range(1, 6) },
 };
 
 function range(lo: number, hi: number): number[] {
@@ -55,6 +61,34 @@ function range(lo: number, hi: number): number[] {
 
 const coveredCount = (items: Exercise[], patterns: Pattern[]): number =>
   patterns.filter((p) => items.some((e) => e.patterns.includes(p))).length;
+
+/**
+ * Essentials first, then the rest at random.
+ *
+ * A block takes only four to six moves out of nine, so a plain shuffle made coverage
+ * of any particular job a probability: the unloaded hinge turned up before 56% of
+ * thirty-minute sessions and the cool-down reached the thoracic rotation two times in
+ * five. A better probability is still the wrong shape of answer — neither of us could
+ * say which sessions were the ones that missed.
+ *
+ * So one move is drawn per distinct `essentialJob` present in the pool, at random from
+ * the moves carrying that job, and those go to the front. The jobs come from the pool
+ * itself, so a job whose moves are all absent simply does not exist and nothing is
+ * forced; a pool with no essentials at all is shuffled exactly as before. The essentials
+ * are shuffled among themselves, because being in the first two of a four-move checklist
+ * is the guarantee that matters, not being first.
+ *
+ * Ordering is all this does. The caller still stops at whatever fits the budget, so the
+ * essentials get first claim on it and the block never overruns to fit them all in.
+ */
+function orderAncillary(rng: Rng, pool: Exercise[]): Exercise[] {
+  const jobs = [...new Set(pool.map((e) => e.essentialJob))]
+    .filter((j): j is string => j !== undefined)
+    .sort();
+  const essentials = jobs.map((job) => pick(rng, pool.filter((e) => e.essentialJob === job)));
+  const taken = new Set(essentials);
+  return [...shuffle(rng, essentials), ...shuffle(rng, pool.filter((e) => !taken.has(e)))];
+}
 
 /**
  * Fill an ancillary block from its pool, stopping at whichever item count sits
@@ -69,7 +103,7 @@ function buildAncillary(
   const items: PlannedItem[] = [];
   let used = 0;
 
-  for (const e of shuffle(createRng(seed), pool)) {
+  for (const e of orderAncillary(createRng(seed), pool)) {
     if (items.length >= ANCILLARY_CAP) break;
     const p = prescribe(e, 'circuit', effort, kit);
     const work = estimateWork(e, p) * (e.unilateral ? 2 : 1);
@@ -115,8 +149,8 @@ const wholeWorkoutSeconds = (plans: BlockPlan[]): number =>
   buildSteps(plans).reduce((a, s) => a + s.estSeconds, 0);
 
 function buildMain(
-  format: Format, pool: Exercise[], combos: Combo[], req: WorkoutRequest, kit: KitProfile,
-  history: HistoryEntry[], target: number, seed: number,
+  format: Format, pool: Exercise[], all: Exercise[], combos: Combo[], req: WorkoutRequest,
+  kit: KitProfile, history: HistoryEntry[], target: number, seed: number,
   cost: (plan: BlockPlan) => number,
 ): { plan: BlockPlan; format: Format } {
   const search = SEARCH[format];
@@ -137,14 +171,28 @@ function buildMain(
       if (format === 'complex') {
         const chosen = selectCombos(combos, rng, history, count);
         if (chosen.length === 0) continue;
+        // Members are looked up in the WHOLE database, never in `pool`. `pool` is
+        // filtered by the requested patterns, so looking up there dropped any member
+        // whose pattern was not ticked: asking for hinge and squat shipped "Clean,
+        // Press, Squat" without the press, while keeping the light load band that was
+        // chosen FOR that press. A chain is fixed; it is not served in part.
+        // `filterCombos` has already checked every member against the kit and the
+        // capability, which is the gate that belongs here.
         exercises = chosen.flatMap((c) =>
-          c.steps.map((s) => pool.find((e) => e.id === s.exerciseId)).filter((e): e is Exercise => !!e));
-        items = chosen.flatMap((c) =>
-          c.steps.flatMap((s) => {
-            const e = pool.find((x) => x.id === s.exerciseId);
-            if (!e) return [];
-            return planItems({ ...e, defaultReps: s.reps }, kit, 'complex', req.effort, c.loadBand);
-          }));
+          c.steps.map((s) => all.find((e) => e.id === s.exerciseId)).filter((e): e is Exercise => !!e));
+        items = chosen.flatMap((c) => {
+          // A per-side chain runs whole, one side at a time. Expanding each step into
+          // left and right in place would emit Clean L, Clean R, Press L, ... which
+          // asks him to put the bell down and swap hands mid-chain: the one thing a
+          // complex forbids. Same work, same total, different order.
+          const passes: Array<'left' | 'right' | undefined> = c.perSide ? ['left', 'right'] : [undefined];
+          return passes.flatMap((side) =>
+            c.steps.flatMap((s) => {
+              const e = all.find((x) => x.id === s.exerciseId);
+              if (!e) return [];
+              return planItems({ ...e, defaultReps: s.reps }, kit, 'complex', req.effort, c.loadBand, side);
+            }));
+        });
       } else {
         exercises = format === 'strength'
           ? selectStrength(pool, rng, history, count)
@@ -178,7 +226,7 @@ function buildMain(
   if (candidates.length === 0) {
     return format === 'circuit'
       ? { plan: { block: 'Main', rounds: 1, betweenRoundsRest: between, items: [] }, format }
-      : buildMain('circuit', pool, combos, req, kit, history, target, seed, cost);
+      : buildMain('circuit', pool, all, combos, req, kit, history, target, seed, cost);
   }
 
   // The trimmed variants were ranked alongside the nominal ones, so the winner is
@@ -207,12 +255,12 @@ export function generate(input: GenerateInput): Workout {
   const cost = (plan: BlockPlan) => wholeWorkoutSeconds([warm, plan, cool]);
 
   let seed = request.seed;
-  let built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
+  let built = buildMain(wanted, pool, exercises, usableCombos, request, kit, history, total, seed, cost);
 
   const previous = history[0] ? [...history[0].mainExerciseIds].sort() : null;
   for (let i = 0; i < 5 && previous && mainIdsOf(built.plan).join() === previous.join(); i++) {
     seed += 1;
-    built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
+    built = buildMain(wanted, pool, exercises, usableCombos, request, kit, history, total, seed, cost);
   }
 
   const steps = buildSteps([warm, built.plan, cool]);

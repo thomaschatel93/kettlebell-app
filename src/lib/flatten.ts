@@ -24,10 +24,16 @@ export interface BlockPlan {
  * exercise becomes two, one per side, so the app holds his place instead of asking
  * him to remember which arm he is on while breathing hard. It also means the
  * estimate is a plain sum over items, with no doubling applied anywhere else.
+ *
+ * `side` is for a chain that runs down one side before it changes. Supply it and
+ * the exercise yields ONE item on that side, because the caller is walking the
+ * sides itself; leave it out and a unilateral exercise expands in place as usual.
+ * A bilateral exercise never carries a side label, whoever asks: a goblet squat
+ * done during the left-hand pass is still just a goblet squat.
  */
 export function planItems(
   exercise: Exercise, kit: KitProfile, format: Format, effort: Effort,
-  bandOverride?: Exercise['loadBand'],
+  bandOverride?: Exercise['loadBand'], side?: 'left' | 'right',
 ): PlannedItem[] {
   const bellKg = exercise.bells === 0 ? null : resolveBell(bandOverride ?? exercise.loadBand, kit);
   if (exercise.bells > 0 && bellKg === null) return [];
@@ -37,6 +43,8 @@ export function planItems(
     exercise, bellKg, reps: p.reps, seconds: p.seconds,
     restSeconds: p.restSeconds, estSeconds: estimateWork(exercise, p),
   };
+
+  if (side !== undefined) return [exercise.unilateral ? { ...base, side } : base];
 
   return exercise.unilateral
     ? [{ ...base, side: 'left' as const }, { ...base, side: 'right' as const }]
