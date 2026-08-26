@@ -142,6 +142,24 @@ export function createLocalStore<T, P = T>(options: {
   };
 
   const publish = (next: T | ((previous: T) => T)): boolean => {
+    // With nothing mounted, the cache is answering to nobody and may be
+    // arbitrarily old: the `storage` event that keeps it honest only fires for
+    // writes from ANOTHER tab, so anything that changed this key from outside
+    // the store in this one is invisible until something subscribes.
+    //
+    // That is not hypothetical. The runner appends a finished session without
+    // ever reading history itself, so at that moment this store has no
+    // listeners at all. Re-reading first makes such a write a genuine
+    // read-modify-write - the same guarantee `pushHistory` gave when it read
+    // storage on every call - rather than an update applied to a stale copy.
+    //
+    // While listeners exist the cache is already current (this tab is the only
+    // writer, and another tab's write arrives as a `storage` event), so the
+    // re-read costs nothing where it would not help.
+    if (listeners.size === 0) {
+      snapshot = read();
+      loaded = true;
+    }
     const value = typeof next === 'function' ? (next as (previous: T) => T)(current()) : next;
     snapshot = value;
     loaded = true;

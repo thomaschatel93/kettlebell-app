@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import { TabBar } from "@/components/TabBar";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -23,7 +24,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className={`${geist.variable} antialiased`}>
-      <body className="app-shell">{children}</body>
+      <body className="app-shell">
+        {children}
+        {/*
+          Rendered here rather than per page, so it is one bar with one current
+          tab wherever he is. It hides itself on the running workout - nothing
+          may sit under the thumb mid-set - and carries its own safe-area inset,
+          because a fixed element ignores the padding .app-shell puts on body.
+        */}
+        <TabBar />
+      </body>
     </html>
   );
 }

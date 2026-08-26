@@ -81,3 +81,27 @@ export function Chip({
     </button>
   );
 }
+
+/**
+ * The same pill, read-only: what a finished session trained.
+ *
+ * Not a `Chip` with `onClick` left off. A Chip is a control - it carries
+ * `aria-pressed`, so a screen reader announces "Hinge, not pressed, button" for
+ * a label that was never selectable and cannot be pressed. This is a label, so
+ * it is a span, and it shares the tint constants above rather than restating
+ * them, which is what keeps the measured contrast budget in one place.
+ */
+export function PatternTag({ tone, children }: { tone: Pattern; children: ReactNode }) {
+  return (
+    <span
+      style={{
+        backgroundColor: `color-mix(in oklab, var(--${tone}) ${CHIP_TINT_PCT}%, var(--surface-2))`,
+        borderColor: `color-mix(in oklab, var(--${tone}) ${CHIP_EDGE_PCT}%, var(--border))`,
+        color: 'var(--text)',
+      }}
+      className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold leading-none"
+    >
+      {children}
+    </span>
+  );
+}

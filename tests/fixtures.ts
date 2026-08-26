@@ -37,9 +37,16 @@ export const req = (over: Partial<WorkoutRequest> = {}): WorkoutRequest => ({
   effort: 'normal', totalMinutes: 30, format: 'auto', seed: 1, ...over,
 });
 
+/**
+ * `workout` carries a `steps` array even when the test does not care what is in
+ * it. `loadHistory` drops any entry whose workout has no steps array - the
+ * guard that stops a half-written workout crashing the screen that renders it -
+ * so an entry built without one is written, silently discarded on the way back
+ * out, and every assertion about it fails for a reason nothing on screen shows.
+ */
 export const entry = (over: Partial<HistoryEntry> = {}): HistoryEntry => ({
   id: 'h1', createdAt: '2026-08-25T09:00:00.000Z',
-  workout: {} as Workout, mainExerciseIds: [], workedSeconds: 1500, ...over,
+  workout: { steps: [] } as unknown as Workout, mainExerciseIds: [], workedSeconds: 1500, ...over,
 });
 
 export const FULL_KIT: KitProfile = {

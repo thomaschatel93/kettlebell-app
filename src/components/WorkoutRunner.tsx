@@ -11,7 +11,8 @@ import { RestCard } from '@/components/RestCard';
 import { isActiveHydrated, publishActive, useActiveWorkout } from '@/lib/active-store';
 import { nowMs, tick as readClock } from '@/lib/clock';
 import { ALL_EXERCISES } from '@/lib/data/ancillary';
-import { pushHistory, type ActiveState } from '@/lib/storage';
+import { type ActiveState } from '@/lib/storage';
+import { appendHistory } from '@/lib/history-store';
 import type { Exercise, HistoryEntry, Step, WorkStep, Workout } from '@/lib/types';
 import { useAudioCues } from '@/lib/useAudioCues';
 import { useWakeLock } from '@/lib/useWakeLock';
@@ -353,7 +354,10 @@ export function WorkoutRunner() {
     if (state === null) return;
     const worked = state.workedSeconds + pending.current;
     pending.current = 0;
-    pushHistory(historyEntry(state.workout, done, worked));
+    // Appended through the shared store, not written straight to storage: the
+    // Done screen mounts from this same store a moment later with no reload in
+    // between, so a bare write would leave it showing the session before last.
+    appendHistory(historyEntry(state.workout, done, worked));
     publishActive(null);
     router.push('/workout/done');
   };

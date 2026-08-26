@@ -169,6 +169,7 @@ export const KITS_KEY: string = KEYS.kits;
  */
 export const PREFS_KEY: string = KEYS.prefs;
 export const ACTIVE_KEY: string = KEYS.active;
+export const HISTORY_KEY: string = KEYS.history;
 
 /**
  * The minimum an entry needs to be worth keeping at all. `id` identifies it;
@@ -207,8 +208,17 @@ export function loadHistory(): HistoryEntry[] {
   if (!isPlainObject(raw) || raw.v !== VERSION || !Array.isArray(raw.entries)) return [];
   return raw.entries.filter(hasKeepableHistoryShape).map(sanitizeHistoryEntry);
 }
-export const pushHistory = (e: HistoryEntry): boolean =>
-  write(KEYS.history, { v: VERSION, entries: [e, ...loadHistory()].slice(0, MAX_HISTORY) });
+
+/**
+ * The whole list, capped. The cap lives here rather than at each call site, so
+ * "history is the last thirty sessions" is stated once however an entry gets
+ * added - appended by the runner, or rewritten by the Done screen stamping a
+ * `felt` rating onto the newest one.
+ */
+export const saveHistory = (entries: HistoryEntry[]): boolean =>
+  write(KEYS.history, { v: VERSION, entries: entries.slice(0, MAX_HISTORY) });
+
+export const pushHistory = (e: HistoryEntry): boolean => saveHistory([e, ...loadHistory()]);
 
 export function loadPrefs(): Prefs {
   const raw = readRaw(KEYS.prefs);
