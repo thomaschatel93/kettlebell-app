@@ -1,7 +1,7 @@
 import type {
   Combo, Exercise, Format, HistoryEntry, KitProfile, Pattern, Workout, WorkoutRequest,
 } from '@/lib/types';
-import { createRng, shuffle } from '@/lib/rng';
+import { createRng, pick, shuffle, type Rng } from '@/lib/rng';
 import { isUnderSpecified } from '@/lib/kit';
 import { cooldownPool, filterCombos, filterPool, warmupPool } from '@/lib/pool';
 import { budget } from '@/lib/budget';
@@ -63,6 +63,34 @@ const coveredCount = (items: Exercise[], patterns: Pattern[]): number =>
   patterns.filter((p) => items.some((e) => e.patterns.includes(p))).length;
 
 /**
+ * Essentials first, then the rest at random.
+ *
+ * A block takes only four to six moves out of nine, so a plain shuffle made coverage
+ * of any particular job a probability: the unloaded hinge turned up before 56% of
+ * thirty-minute sessions and the cool-down reached the thoracic rotation two times in
+ * five. A better probability is still the wrong shape of answer — neither of us could
+ * say which sessions were the ones that missed.
+ *
+ * So one move is drawn per distinct `essentialJob` present in the pool, at random from
+ * the moves carrying that job, and those go to the front. The jobs come from the pool
+ * itself, so a job whose moves are all absent simply does not exist and nothing is
+ * forced; a pool with no essentials at all is shuffled exactly as before. The essentials
+ * are shuffled among themselves, because being in the first two of a four-move checklist
+ * is the guarantee that matters, not being first.
+ *
+ * Ordering is all this does. The caller still stops at whatever fits the budget, so the
+ * essentials get first claim on it and the block never overruns to fit them all in.
+ */
+function orderAncillary(rng: Rng, pool: Exercise[]): Exercise[] {
+  const jobs = [...new Set(pool.map((e) => e.essentialJob))]
+    .filter((j): j is string => j !== undefined)
+    .sort();
+  const essentials = jobs.map((job) => pick(rng, pool.filter((e) => e.essentialJob === job)));
+  const taken = new Set(essentials);
+  return [...shuffle(rng, essentials), ...shuffle(rng, pool.filter((e) => !taken.has(e)))];
+}
+
+/**
  * Fill an ancillary block from its pool, stopping at whichever item count sits
  * closest to the nominal budget. It does not have to hit that budget: the caller
  * measures what it actually cost and hands the remainder to the main block, so a
@@ -75,7 +103,7 @@ function buildAncillary(
   const items: PlannedItem[] = [];
   let used = 0;
 
-  for (const e of shuffle(createRng(seed), pool)) {
+  for (const e of orderAncillary(createRng(seed), pool)) {
     if (items.length >= ANCILLARY_CAP) break;
     const p = prescribe(e, 'circuit', effort, kit);
     const work = estimateWork(e, p) * (e.unilateral ? 2 : 1);

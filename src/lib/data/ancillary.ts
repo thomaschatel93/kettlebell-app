@@ -13,6 +13,69 @@ const move = (
   image: null, imagePanels: 1, cues,
 });
 
+export interface AncillaryEssential {
+  /** What the block must cover. One move per job is guaranteed a place. */
+  job: string;
+  /**
+   * The moves that answer it. One is drawn at random, so the guarantee does not pin
+   * the same move to every single session — a warm-up that always opened with the
+   * same thirty seconds would be its own kind of wrong.
+   */
+  ids: readonly string[];
+}
+
+/**
+ * The jobs a block may not leave to chance, named rather than left to the order of
+ * the array below, because array order is a contract nobody can see and the next
+ * person to add a move would break it without noticing.
+ *
+ * `buildAncillary` draws one move per job first and fills the rest of the budget at
+ * random. It is the block builder that reads this, through `essentialJob` on the
+ * records: the engine takes its data by injection and never imports this file.
+ *
+ * The warm-up: a pulse raiser, because a warm-up that does not raise temperature is
+ * not a warm-up; and the unloaded hinge, because the hinge is the pattern almost
+ * every session then loads, and grooving it costs thirty seconds.
+ */
+export const WARMUP_ESSENTIALS: readonly AncillaryEssential[] = [
+  { job: 'pulse raiser', ids: ['marching-on-the-spot', 'heel-flicks'] },
+  { job: 'unloaded hinge', ids: ['hip-hinge'] },
+];
+
+/**
+ * The cool-down: only two, because a fifteen-minute cool-down has room for two moves
+ * and forcing a third would either overrun the budget or crowd out everything else.
+ *
+ * Thoracic rotation, because most of the 34 main exercises are single-arm, so nearly
+ * every session loads rotation, and the twist is the only move in the whole list that
+ * addresses it — lose it to the shuffle and the mid-back gets nothing.
+ *
+ * Hips and hamstrings as one job with two answers, because the hinge is the primary
+ * pattern of the app: every session with a swing or a deadlift in it has loaded the
+ * posterior chain, and the hip flexors are the other half of the same hinge. Which of
+ * the two he gets can vary; getting neither cannot.
+ *
+ * Chest and shoulders is deliberately NOT on this list. Pressing is common but it is
+ * genuinely optional — a pull and hinge session contains none — so guaranteeing it
+ * would spend a scarce slot on a stretch the session may not have earned.
+ */
+export const COOLDOWN_ESSENTIALS: readonly AncillaryEssential[] = [
+  { job: 'thoracic rotation', ids: ['seated-thoracic-twist'] },
+  { job: 'hips and hamstrings', ids: ['standing-hamstring-stretch', 'couch-stretch'] },
+];
+
+const ESSENTIAL_BY_ID = new Map<string, string>(
+  [...WARMUP_ESSENTIALS, ...COOLDOWN_ESSENTIALS].flatMap((g) =>
+    g.ids.map((id) => [id, g.job] as [string, string])),
+);
+
+/** Stamps the job onto the records the lists name. The lists stay the single source. */
+const withEssentials = (moves: Exercise[]): Exercise[] =>
+  moves.map((e) => {
+    const job = ESSENTIAL_BY_ID.get(e.id);
+    return job === undefined ? e : { ...e, essentialJob: job };
+  });
+
 /**
  * Rendered as a checklist, not as hero cards, so these never need pictures.
  *
@@ -46,7 +109,7 @@ const move = (
  * single-arm work, and the lats and lower back after everything. Drop one and the
  * cool-down stops covering something the session actually did.
  */
-export const ANCILLARY: Exercise[] = [
+export const ANCILLARY: Exercise[] = withEssentials([
   move('marching-on-the-spot', 'Marching on the Spot', 'warmup', {
     setup: ['Stand tall with your feet under your hips.'],
     execution: ['March on the spot, driving each knee up to hip height.', 'Swing the opposite arm with each step.'],
@@ -117,6 +180,6 @@ export const ANCILLARY: Exercise[] = [
     execution: ['Step through slowly until the chest opens.', 'Hold there and keep breathing.'],
     mistakes: ['Ribs flaring and the back arching for more range.', 'Shoulder rolling forward under the stretch.'],
   }, 30, true),
-];
+]);
 
 export const ALL_EXERCISES: Exercise[] = [...EXERCISES, ...ANCILLARY];

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '@/lib/generate';
 import { capabilityRank, type Capability, type Format, type Pattern, type WorkStep, type WorkoutRequest } from '@/lib/types';
-import { FIXTURE_EXERCISES, FIXTURE_COMBOS, FULL_KIT, HOME_KIT, combo, entry, req } from './fixtures';
-import type { Combo, HistoryEntry, KitProfile } from '@/lib/types';
+import { FIXTURE_EXERCISES, FIXTURE_COMBOS, FULL_KIT, HOME_KIT, combo, entry, ex, req } from './fixtures';
+import type { Combo, Exercise, HistoryEntry, KitProfile } from '@/lib/types';
 
 const NOW = '2026-08-25T09:00:00.000Z';
 const ALL: Pattern[] = ['hinge', 'squat', 'push', 'pull', 'carry', 'core'];
@@ -365,6 +365,53 @@ describe('generate: complexes are performable', () => {
       const w = run({ format: 'complex', totalMinutes, patterns: ALL, seed: totalMinutes });
       const first = mainWork(w)[0];
       if (first) expect(first.totalRounds, `${totalMinutes}min`).toBeLessThanOrEqual(6);
+    }
+  });
+});
+
+describe('generate: ancillary essentials', () => {
+  /**
+   * Dataset-independent. The real guarantee is pinned against the real moves in
+   * tests/data-ancillary.test.ts; this pins the mechanism that delivers it, so the
+   * engine keeps working if the ancillary list is ever replaced wholesale.
+   */
+  const anc = (id: string, over: Partial<Exercise> = {}) => ex(id, {
+    patterns: ['core'], bells: 0, secondsPerRep: 0,
+    defaultReps: undefined, defaultWorkSeconds: 30, ...over,
+  });
+  const WITH_ESSENTIAL = [
+    ...FIXTURE_EXERCISES,
+    anc('w-must', { warmupSuitable: true, essentialJob: 'the one that matters' }),
+  ];
+  const warmIds = (exercises: Exercise[], seed: number) => {
+    const w = generate({
+      request: req({ capability: 'advanced', seed }), kit: FULL_KIT,
+      exercises, combos: FIXTURE_COMBOS, history: [], now: NOW,
+    });
+    return new Set(w.steps
+      .filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Warm-up')
+      .map((s) => s.exerciseId));
+  };
+
+  it('draws the essential move into every warm-up that has room', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const ids = warmIds(WITH_ESSENTIAL, seed);
+      if (ids.size < 2) continue;
+      expect(ids.has('w-must'), `seed ${seed}`).toBe(true);
+    }
+  });
+
+  it('still builds a block when nothing in the pool is essential', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      expect(warmIds(FIXTURE_EXERCISES, seed).size).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not overrun the budget to fit an essential in', () => {
+    // Every ancillary move here costs 30s against a 180s warm-up budget, so an
+    // essential takes a slot, it does not add one.
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(warmIds(WITH_ESSENTIAL, seed).size).toBeLessThanOrEqual(warmIds(FIXTURE_EXERCISES, seed).size + 1);
     }
   });
 });

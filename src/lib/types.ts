@@ -30,6 +30,14 @@ export interface Exercise {
   cooldownSuitable: boolean;
   image: string | null;
   imagePanels: 1 | 2 | 3;
+  /**
+   * For ancillary moves only: the job this move is an answer to, e.g. 'pulse raiser'.
+   * The warm-up and cool-down blocks draw one move per distinct job before they fill
+   * whatever budget is left at random, so a job with a move flagged for it is
+   * guaranteed a place rather than left to the shuffle. Set from the named lists in
+   * `data/ancillary.ts`; the engine never needs to know which jobs exist.
+   */
+  essentialJob?: string;
   videoUrl?: string;            // phase 2 populates this from Reels
   cues: { setup: string[]; execution: string[]; mistakes: string[] };
 }

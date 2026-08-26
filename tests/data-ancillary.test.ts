@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { ANCILLARY, ALL_EXERCISES } from '@/lib/data/ancillary';
+import {
+  ANCILLARY, ALL_EXERCISES, COOLDOWN_ESSENTIALS, WARMUP_ESSENTIALS,
+} from '@/lib/data/ancillary';
 import { COMBOS } from '@/lib/data/combos';
 import { EXERCISES } from '@/lib/data/exercises';
-import { capabilityRank } from '@/lib/types';
+import { capabilityRank, type KitProfile, type WorkStep } from '@/lib/types';
+import { generate } from '@/lib/generate';
 
 describe('ancillary moves', () => {
   it('holds fourteen bodyweight moves', () => {
@@ -35,6 +38,84 @@ describe('ancillary moves', () => {
   it('combines into one list with no id collisions', () => {
     expect(ALL_EXERCISES).toHaveLength(EXERCISES.length + ANCILLARY.length);
     expect(new Set(ALL_EXERCISES.map((e) => e.id)).size).toBe(ALL_EXERCISES.length);
+  });
+});
+
+describe('the jobs a block may not leave to chance', () => {
+  const ESSENTIALS = [...WARMUP_ESSENTIALS, ...COOLDOWN_ESSENTIALS];
+
+  /**
+   * Deliberately a change detector. Every other test here iterates the lists, so
+   * deleting an entry deletes its own check and the guarantee evaporates in silence —
+   * which is how the thoracic rotation was lost the first time. Removing a job should
+   * mean editing this line on purpose and saying why in the commit.
+   */
+  it('does not quietly stop guaranteeing a job', () => {
+    expect(WARMUP_ESSENTIALS.map((g) => g.job).sort())
+      .toEqual(['pulse raiser', 'unloaded hinge']);
+    expect(COOLDOWN_ESSENTIALS.map((g) => g.job).sort())
+      .toEqual(['hips and hamstrings', 'thoracic rotation']);
+  });
+
+  it('names only moves that exist, so a typo cannot silently drop a guarantee', () => {
+    for (const g of ESSENTIALS) {
+      expect(g.ids.length, g.job).toBeGreaterThan(0);
+      for (const id of g.ids) {
+        expect(ANCILLARY.some((e) => e.id === id), `${g.job} -> ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it('puts each named move in the block whose job it is', () => {
+    for (const g of WARMUP_ESSENTIALS)
+      for (const id of g.ids) expect(ANCILLARY.find((e) => e.id === id)!.warmupSuitable, id).toBe(true);
+    for (const g of COOLDOWN_ESSENTIALS)
+      for (const id of g.ids) expect(ANCILLARY.find((e) => e.id === id)!.cooldownSuitable, id).toBe(true);
+  });
+
+  /**
+   * The guarantee itself, read off real generated workouts rather than asserted about
+   * the data. A block with room for two moves must spend them on the two jobs that
+   * cannot be missed; before this the raiser turned up in 77% of short warm-ups and the
+   * cool-down reached the thoracic rotation in 40%.
+   */
+  const KIT: KitProfile = {
+    id: 'home', name: 'Home', hasBench: false,
+    bells: [{ weightKg: 12, count: 1 }, { weightKg: 16, count: 1 }, { weightKg: 24, count: 1 }],
+  };
+
+  const blockIds = (seed: number, totalMinutes: 15 | 20 | 30 | 45 | 60, block: string) => {
+    const w = generate({
+      request: { kitProfileId: 'home', patterns: ['hinge', 'squat', 'push'], capability: 'intermediate',
+        effort: 'normal', totalMinutes, format: 'auto', seed },
+      kit: KIT, exercises: ALL_EXERCISES, combos: COMBOS, history: [], now: 'n',
+    });
+    return [...new Set(w.steps
+      .filter((s): s is WorkStep => s.kind === 'work' && s.block === block)
+      .map((s) => s.exerciseId))];
+  };
+
+  const DURATIONS = [15, 20, 30, 45, 60] as const;
+  const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+
+  it.each(DURATIONS)('always warms up with a pulse raiser and an unloaded hinge (%imin)', (totalMinutes) => {
+    for (const seed of SEEDS) {
+      const ids = blockIds(seed, totalMinutes, 'Warm-up');
+      if (ids.length < 2) continue;
+      for (const g of WARMUP_ESSENTIALS) {
+        expect(g.ids.some((id) => ids.includes(id)), `${totalMinutes}min seed ${seed}: ${g.job}`).toBe(true);
+      }
+    }
+  });
+
+  it.each(DURATIONS)('always cools down with rotation and a hip or hamstring stretch (%imin)', (totalMinutes) => {
+    for (const seed of SEEDS) {
+      const ids = blockIds(seed, totalMinutes, 'Cool-down');
+      if (ids.length < 2) continue;
+      for (const g of COOLDOWN_ESSENTIALS) {
+        expect(g.ids.some((id) => ids.includes(id)), `${totalMinutes}min seed ${seed}: ${g.job}`).toBe(true);
+      }
+    }
   });
 });
 
