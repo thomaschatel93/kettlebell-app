@@ -753,8 +753,12 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: '/exercises/floor-pullover.webp',
-    imagePanels: 1,
+    // No picture ships. The candidate showed both palms splayed flat on the round
+    // ball with the handle hanging unused below, which contradicts the setup cue
+    // two lines down. A regeneration needs the horns grip, and two panels: the
+    // bell over the chest, and the far end of the range with the ribs still down.
+    image: null,
+    imagePanels: 2,
     cues: {
       setup: ['Lie on your back with the knees bent and the feet flat.', 'Hold the bell by the horns with both hands over your chest, arms straight and the elbows soft.'],
       execution: ['Press the lower back into the floor and keep it there.', 'Take the bell back over your head only as far as the ribs stay down.', 'Pull it back over the chest with the lats, the elbows staying where they are.'],

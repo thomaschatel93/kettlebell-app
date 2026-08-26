@@ -14,6 +14,12 @@
  * and those are enclosed by the outline: a blanket white-to-alpha would punch
  * holes straight through them.
  *
+ * **The pockets the border cannot reach.** Some background is walled off: the
+ * gap between an arm and a torso, the space at a waist, the window inside a
+ * kettlebell handle. Those pockets are background and must go dark, while a
+ * white sock must not. See `isWalledOffBackground` for how the two are told
+ * apart, and why the answer cannot be how big the pocket is.
+ *
  * **No upscaling.** The tiles come out small, some under 200px. `resize` is
  * capped with `withoutEnlargement`, so a crisp small image is what ships and CSS
  * scales it down on the card. A soft blown-up one would be worse.
@@ -32,11 +38,17 @@ export const CONTENT_MAX_LUMA = 235;
 const EXTERIOR_MIN_LUMA = 200;
 /** Breathing room kept around the drawn content. */
 export const PADDING = 10;
+/** Dark enough to be the drawing's ink rather than a fill colour. */
+const OUTLINE_MAX_LUMA = 128;
 /**
- * How much of a tile a light region has to cover before it is read as walled-off
- * background rather than something the figure is wearing.
+ * A distance band counts as part of the outline shell while at least this share
+ * of the pixels in it are ink. The interior of a figure never gets near it: it
+ * runs at 40–65% ink, because it is a mix of line work and flat fill, while every
+ * stroke band measured across the 32 tiles here sits at 71% or above.
  */
-const ENCLOSED_BACKGROUND_FRACTION = 0.0075;
+const SHELL_INK_SHARE = 0.7;
+/** How far each channel may sit from the background's own colour and still match it. */
+const BACKGROUND_TOLERANCE = 8;
 /** The longest edge any tile is allowed to reach. Nothing is ever enlarged to it. */
 const MAX_EDGE = 900;
 
@@ -86,17 +98,129 @@ export async function contentRegion(source: string): Promise<Region> {
 }
 
 
+/** The colour that occurs most often across a set of pixels, packed as 0xRRGGBB. */
+function modalColour(pixels: readonly number[], rgba: Buffer): number {
+  const counts = new Map<number, number>();
+  for (const p of pixels) {
+    const i = p * 4;
+    const key = ((rgba[i] ?? 0) << 16) | ((rgba[i + 1] ?? 0) << 8) | (rgba[i + 2] ?? 0);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = 0xffffff;
+  let most = -1;
+  for (const [key, n] of counts) {
+    if (n > most) { most = n; best = key; }
+  }
+  return best;
+}
+
+function matchesColour(a: number, b: number): boolean {
+  return Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) <= BACKGROUND_TOLERANCE
+    && Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) <= BACKGROUND_TOLERANCE
+    && Math.abs((a & 255) - (b & 255)) <= BACKGROUND_TOLERANCE;
+}
+
 /**
- * Light regions that no border touches but that are too large to be anything the
- * figure is wearing. Returns their pixel indices.
+ * How many pixels thick the drawing's outline is, measured rather than assumed.
+ *
+ * Walking outwards from the exterior, the first band is the stroke's
+ * anti-aliased ramp, which is only half ink. Behind it come the bands that are
+ * almost pure ink: the stroke itself. Once the stroke is crossed the ink share
+ * collapses to the 40–65% that a mix of line work and flat fill produces. So the
+ * ramp is skipped, and the stroke ends at the last band still above
+ * `SHELL_INK_SHARE`.
+ *
+ * Measured here it comes out at 2px on grid-01, 3px on grid-02 and 4–5px on the
+ * 1024px stills: the same drawing style at three scales, which is exactly why
+ * this is measured per image rather than written down as a number.
  */
-function enclosedBackground(
+function outlineThickness(dist: Int32Array, isInk: (p: number) => boolean): number {
+  const total: number[] = [];
+  const ink: number[] = [];
+  for (let p = 0; p < dist.length; p += 1) {
+    const d = dist[p] ?? -1;
+    if (d < 1) continue;
+    total[d] = (total[d] ?? 0) + 1;
+    if (isInk(p)) ink[d] = (ink[d] ?? 0) + 1;
+  }
+  let thickness = 1;
+  let started = false;
+  for (let d = 1; d < total.length; d += 1) {
+    const n = total[d] ?? 0;
+    if (n === 0) break;
+    const share = (ink[d] ?? 0) / n;
+    if (share >= SHELL_INK_SHARE) { started = true; thickness = d; continue; }
+    if (started) break;
+  }
+  return thickness;
+}
+
+/** How far every pixel sits from the exterior, in 4-connected steps. */
+function distanceFromExterior(exterior: Uint8Array, width: number, height: number): Int32Array {
+  const dist = new Int32Array(width * height).fill(-1);
+  let frontier: number[] = [];
+  for (let p = 0; p < width * height; p += 1) {
+    if (exterior[p] === 1) { dist[p] = 0; frontier.push(p); }
+  }
+  for (let d = 1; frontier.length > 0; d += 1) {
+    const next: number[] = [];
+    for (const p of frontier) {
+      const x = p % width;
+      const y = (p - x) / width;
+      const neighbours = [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, y > 0 ? p - width : -1, y < height - 1 ? p + width : -1];
+      for (const q of neighbours) {
+        if (q < 0 || dist[q] !== -1) continue;
+        dist[q] = d;
+        next.push(q);
+      }
+    }
+    frontier = next;
+  }
+  return dist;
+}
+
+/**
+ * Whether one enclosed light region is walled-off background rather than
+ * something the figure wears.
+ *
+ * The old rule asked how big the region was, and that is the wrong question: a
+ * pocket of background between an arm and a torso is exactly as white as a
+ * pocket ten times its size, and the real ones measured here run from 0.10% of
+ * a tile to 1.2%, straight through anything a threshold could separate. Size is
+ * not evidence. Two things are, and neither depends on area:
+ *
+ * 1. **It is the background's own colour.** The region's most common colour has
+ *    to be the colour the exterior is painted in. A highlight on a bell handle
+ *    is a flat 241 grey and a shorts stripe a flat 203; both are light enough to
+ *    be caught by the flood fill's threshold, and neither is the background.
+ * 2. **It is behind the figure, not on it.** A white sock sits against the
+ *    silhouette: the only thing between it and the exterior is the outline
+ *    stroke. A background pocket is walled off by a whole limb. So the region
+ *    has to stand further from the exterior than the outline is thick — and the
+ *    outline's thickness is measured from this image, not assumed, so the same
+ *    rule holds for a 130px tile and a 900px still.
+ *
+ * Both tests are properties of the drawing. Neither asks how large the pocket
+ * happens to be, so improving the artwork cannot break them.
+ */
+export function enclosedBackground(
   isLight: (byteOffset: number) => boolean,
+  rgba: Buffer,
   exterior: Uint8Array,
   width: number,
   height: number,
 ): number[] {
-  const minArea = ENCLOSED_BACKGROUND_FRACTION * width * height;
+  const isInk = (p: number): boolean => {
+    const i = p * 4;
+    return luma(rgba[i] ?? 255, rgba[i + 1] ?? 255, rgba[i + 2] ?? 255) < OUTLINE_MAX_LUMA;
+  };
+  const dist = distanceFromExterior(exterior, width, height);
+  const outline = outlineThickness(dist, isInk);
+
+  const exteriorPixels: number[] = [];
+  for (let p = 0; p < width * height; p += 1) if (exterior[p] === 1) exteriorPixels.push(p);
+  const background = modalColour(exteriorPixels, rgba);
+
   const seen = new Uint8Array(width * height);
   const found: number[] = [];
   for (let start = 0; start < width * height; start += 1) {
@@ -104,10 +228,13 @@ function enclosedBackground(
     const region: number[] = [];
     const stack = [start];
     seen[start] = 1;
+    let nearest = Number.MAX_SAFE_INTEGER;
     while (stack.length > 0) {
       const p = stack.pop();
       if (p === undefined) break;
       region.push(p);
+      const d = dist[p] ?? 0;
+      if (d < nearest) nearest = d;
       const x = p % width;
       const y = (p - x) / width;
       const neighbours = [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, y > 0 ? p - width : -1, y < height - 1 ? p + width : -1];
@@ -117,7 +244,11 @@ function enclosedBackground(
         stack.push(q);
       }
     }
-    if (region.length >= minArea) found.push(...region);
+    // `outline + 1` is where a region lying directly against the stroke starts,
+    // so anything at or below that is on the figure's surface.
+    if (nearest <= outline + 1) continue;
+    if (!matchesColour(modalColour(region, rgba), background)) continue;
+    found.push(...region);
   }
   return found;
 }
@@ -171,12 +302,10 @@ export async function writeCardWebp(
 
   // Not all background is reachable from the border. A bent-over row walls a
   // whole pocket of white off behind the arm, the torso and the bench, and left
-  // alone it ships as a white hole in the middle of a dark card. Such a pocket
-  // is far bigger than any white the figure actually wears: measured across
-  // every tile in this project, socks and shorts stripes stay under 0.55% of the
-  // tile, while every real background pocket is over 1.1%. Anything above the
-  // threshold between them is treated as background too.
-  const enclosedFill = enclosedBackground(isLight, exterior, width, height);
+  // alone it ships as a white hole in the middle of a dark card. Nine tiles
+  // shipped one. `enclosedBackground` finds them by colour and by how far they
+  // stand behind the outline, never by how big they are.
+  const enclosedFill = enclosedBackground(isLight, rgba, exterior, width, height);
   for (const p of enclosedFill) { exterior[p] = 1; }
 
   // Alpha follows how dark the pixel is, so the outline's anti-aliased ramp

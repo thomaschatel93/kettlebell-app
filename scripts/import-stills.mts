@@ -26,22 +26,38 @@ interface Row {
   readonly confidence: string;
 }
 
-/** The filenames the map's "Do not ship" section names, with the reason given. */
-function parseDoNotShip(markdown: string): Map<string, string> {
-  const section = markdown.split(/^## Do not ship\s*$/m)[1] ?? '';
+/**
+ * The filenames the map's "Do not ship" section names, with the reason given.
+ *
+ * This is a safety ban, so it fails closed. Every earlier version failed open:
+ * title-case the heading, append a word to it, use `*` for the bullet or drop
+ * the bold, and the parse silently returned an empty map — the ban became a
+ * no-op and the banned still would have been imported without a word of
+ * warning. Nothing about the ban may depend on the document's formatting
+ * surviving an edit, so both a missing section and an empty one throw.
+ */
+export function parseDoNotShip(markdown: string): Map<string, string> {
+  const parts = markdown.split(/^#+\s+do\s+not\s+ship\b.*$/im);
+  if (parts.length < 2) {
+    throw new Error(`${MAP}: no "Do not ship" section. It carries the safety ban, so it may not go missing.`);
+  }
+  const section = (parts[1] ?? '').split(/^#+\s/m)[0] ?? '';
   const banned = new Map<string, string>();
   for (const line of section.split('\n')) {
-    const match = /^\s*-\s+\*\*`([^`]+)`\*\*\s*(.*)$/.exec(line);
+    const match = /^\s*[-*+]\s+\**`([^`]+)`\**\s*(.*)$/.exec(line);
     if (match === null) continue;
     const [, file, reason] = match;
     if (file === undefined) continue;
     banned.set(file, (reason ?? '').replace(/^[^A-Za-z]*/, '').trim());
   }
+  if (banned.size === 0) {
+    throw new Error(`${MAP}: the "Do not ship" section named no file. An empty ban is a ban that does nothing.`);
+  }
   return banned;
 }
 
 /** The map's table rows: filename, the exercise id claimed for it, and the confidence. */
-function parseRows(markdown: string, knownIds: ReadonlySet<string>): Row[] {
+export function parseRows(markdown: string, knownIds: ReadonlySet<string>): Row[] {
   const rows: Row[] = [];
   for (const line of markdown.split('\n')) {
     if (!line.startsWith('| `')) continue;
@@ -109,4 +125,11 @@ async function main(): Promise<void> {
   for (const line of skipped) console.log(`  - ${line}`);
 }
 
-await main();
+/**
+ * Only import when this file is the process entry point, so a test can import
+ * `parseDoNotShip` without rewriting `public/exercises/` as a side effect.
+ */
+const entry = process.argv[1];
+if (entry !== undefined && path.resolve(entry) === import.meta.filename) {
+  await main();
+}

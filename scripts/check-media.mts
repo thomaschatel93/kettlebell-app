@@ -30,10 +30,32 @@ if (missing.length === 0) {
   }
 }
 
-const singles = withImage.filter((e) => e.imagePanels === 1 && e.mechanic === 'ballistic');
-if (singles.length > 0) {
-  console.log(`\n${singles.length} ballistics ship as a single position and would read better with more:`);
-  for (const e of singles) console.log(`  ${e.id}`);
+/**
+ * What each movement needs before its picture teaches the whole thing. A
+ * ballistic shown as one frozen position does not teach the swing that gets it
+ * there, and the Turkish get-up's six positions want three panels.
+ *
+ * This is checked against images that EXIST, not only against missing ones. A
+ * shortfall on a file that ships is exactly the kind of gap that goes unrecorded
+ * otherwise: the tile is there, so nothing complains, and the fact that it shows
+ * half the movement lives only in a report nobody greps.
+ */
+const PANELS_WANTED: ReadonlyMap<string, number> = new Map([
+  ['turkish-get-up', 3],
+]);
+
+const wanted = (id: string, mechanic: string): number => PANELS_WANTED.get(id)
+  ?? (mechanic === 'ballistic' ? 2 : 1);
+
+const short = withImage
+  .map((e) => ({ e, need: wanted(e.id, e.mechanic) }))
+  .filter(({ e, need }) => e.imagePanels < need);
+
+if (short.length > 0) {
+  console.log(`\n${short.length} ship a picture with too few panels:`);
+  for (const { e, need } of short) {
+    console.log(`  ${e.id.padEnd(24)} has ${e.imagePanels}, wants ${need}`);
+  }
 }
 
 if (broken.length > 0) process.exitCode = 1;

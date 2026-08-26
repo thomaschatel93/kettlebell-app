@@ -39,14 +39,14 @@ interface Band {
   readonly end: number;
 }
 
-interface Cell {
+export interface Cell {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
 }
 
-interface Sheet {
+export interface Sheet {
   readonly file: string;
   readonly columns: number;
   readonly rows: number;
@@ -96,11 +96,16 @@ const GRID_02: Sheet = {
     // a picture that contradicts its own caption.
     'clean', null, 'push-press', null,
     'racked-carry', 'goblet-carry', 'overhead-carry', 'bulgarian-split-squat',
-    'dead-row', 'half-kneeling-press', 'floor-pullover', 'figure-8',
+    // Cell 11 is the floor pullover, and it is not shippable: both palms are
+    // splayed flat on the round BALL of the bell with the handle hanging unused
+    // below it. The exercise's own setup cue says to hold the bell by the horns
+    // with both hands, and an earlier still was banned from the app for this
+    // exact fault. See docs/media-map.md.
+    'dead-row', 'half-kneeling-press', null, 'figure-8',
   ],
 };
 
-const SHEETS: readonly Sheet[] = [GRID_01, GRID_02];
+export const SHEETS: readonly Sheet[] = [GRID_01, GRID_02];
 
 /** Group a run-length mask into bands, merging bands separated by a small gap. */
 function bandsOf(mask: readonly boolean[], mergeGap: number): Band[] {
@@ -251,4 +256,12 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+/**
+ * Only slice when this file is the process entry point. Without the guard,
+ * importing `detectCells` from a test rewrites every file in
+ * `public/exercises/` as a side effect of the import.
+ */
+const entry = process.argv[1];
+if (entry !== undefined && path.resolve(entry) === import.meta.filename) {
+  await main();
+}

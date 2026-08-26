@@ -97,9 +97,12 @@ describe('main exercise database', () => {
     }
   });
 
-  it('gives all but two of them an image, and names the two', () => {
+  it('gives all but three of them an image, and names the three', () => {
+    // Each is named because each is a picture that contradicted its own cue text:
+    // two bells for a one-bell lift, two hands for a one-hand pull, and both palms
+    // on the round ball for a lift held by the horns.
     const missing = EXERCISES.filter((e) => e.image === null).map((e) => e.id).sort();
-    expect(missing).toEqual(['clean-and-press', 'high-pull']);
+    expect(missing).toEqual(['clean-and-press', 'floor-pullover', 'high-pull']);
   });
 
   it('has no Front Raise', () => expect(byId('front-raise')).toBeUndefined());
