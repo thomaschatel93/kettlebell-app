@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kettlebell
 
-## Getting Started
+A personal workout app. Tell it which bells you have, which movement patterns you
+want to train and how many minutes you have; it builds a workout and walks you
+through it one exercise at a time.
 
-First, run the development server:
+Built for one person, one phone. No accounts, no server, no sync.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## How it works
+
+Everything runs on the device. A pure, seeded rules engine turns a request plus the
+exercise database into a flat list of steps; the interface walks that list and holds
+no programming logic of its own. Kit profiles, history and the in-progress workout
+live in `localStorage`.
+
+The engine is deliberately not an LLM call. A rules engine can be held to hard
+invariants — never prescribe a bell you do not own, never exceed the requested time
+by more than ten per cent, never place two exercises sharing a movement pattern back
+to back — and those invariants are tested against thousands of generated workouts.
+
+```
+src/lib/
+  types.ts       every shared type
+  rng.ts         seeded randomness, so a workout is reproducible from its seed
+  kit.ts         your bells, and how they map to light / moderate / heavy
+  pool.ts        which exercises are eligible for this request and this kit
+  budget.ts      splitting the minutes into warm-up, main work and cool-down
+  format.ts      circuit, complex or strength
+  select.ts      choosing the exercises and the order they run in
+  prescribe.ts   reps and rest, scaled by how hard you want it today
+  fit.ts         the arithmetic that makes a workout land on time
+  flatten.ts     turning a plan into the steps the screen walks
+  generate.ts    the one public entry point
+  storage.ts     the only module allowed to touch the browser
+  data/          the exercise database
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Running it
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run verify   # typecheck and the full test suite
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Documents
 
-## Learn More
+- `docs/SPEC.md` — what it does and why, decision by decision
+- `docs/PLAN.md` — the implementation plan, task by task
+- `docs/REVIEW.md` — the pre-implementation review that rewrote both
+- `docs/image-brief.md` — the exercise illustrations, and what is still needed
 
-To learn more about Next.js, take a look at the following resources:
+## Status
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The engine is complete and verified. The interface is not built yet.
