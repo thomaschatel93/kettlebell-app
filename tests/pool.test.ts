@@ -84,6 +84,18 @@ describe('filterCombos', () => {
     expect(filterCombos([c], FIXTURE_EXERCISES, req(), kit({ hasBench: false }))).toEqual([]);
   });
 
+  /**
+   * `buildMain` overrides `defaultReps` with the step reps, which sends `prescribe`
+   * down its reps branch; a carry has `secondsPerRep: 0`, so the step costs nothing
+   * and the workout reports a time it will not take. A carry can never be a member.
+   */
+  it('rejects a combo containing a carry', () => {
+    const c = combo('with-carry', {
+      steps: [{ exerciseId: 'f-clean', reps: 3 }, { exerciseId: 'f-racked-carry', reps: 5 }],
+    });
+    expect(filterCombos([c], FIXTURE_EXERCISES, req(), kit())).toEqual([]);
+  });
+
   it('accepts a combo that satisfies everything', () => {
     const result = filterCombos(FIXTURE_COMBOS, FIXTURE_EXERCISES, req(), kit());
     expect(result).toContainEqual(expect.objectContaining({ id: 'f-combo-a' }));

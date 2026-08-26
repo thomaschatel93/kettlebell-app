@@ -69,11 +69,31 @@ export const COMBOS: Combo[] = [
     // exactly where the swing starts.
   },
   {
+    id: 'deadlift-row',
+    name: 'Deadlift, Row',
+    capability: 'beginner',
+    bells: 1,
+    perSide: true,
+    loadBand: 'moderate',     // the row governs; a deadlift-weight bell will not row for reps
+    steps: [
+      { exerciseId: 'deadlift', reps: 5 },
+      { exerciseId: 'bent-over-row', reps: 5 },
+    ],
+    // Both moves live in the same hinge. Stand the deadlift up, lower the bell back to
+    // the hang, stay folded over and take one hand off to row. Per side because of the
+    // row, so the deadlift comes round once on each side.
+    //
+    // This is the second beginner chain that trains the hinge, and it is here for a
+    // measured reason as well as a training one: with `deadlift-swing` the only chain a
+    // beginner asking for hinge alone could use, a thirty-minute session ran six rounds
+    // of one two-move chain and still finished fourteen per cent short of the clock.
+  },
+  {
     id: 'goblet-lunge-halo',
     name: 'Goblet Squat, Lunge, Halo',
     capability: 'beginner',
     bells: 1,
-    perSide: false,
+    perSide: true,
     loadBand: 'light',        // the halo governs; a squat-weight bell will not circle the head
     steps: [
       { exerciseId: 'goblet-squat', reps: 5 },
@@ -82,6 +102,12 @@ export const COMBOS: Combo[] = [
     ],
     // The bell never leaves the chest. All three are held in the same two-handed
     // position, so the only thing that changes between moves is what the legs do.
+    // `perSide` is true because of the lunge: run the three moves lunging on the left,
+    // then run them again lunging on the right. The squat and the halo therefore come
+    // round twice, which is what performing a chain on both sides means. This one
+    // would also be safe expanded in place, since the bell never changes hands, but
+    // nothing in the data can express "unilateral leg, bilateral grip", and the rule
+    // that catches the chains where it IS unsafe has to hold for all of them.
   },
   {
     id: 'figure-8-swing',

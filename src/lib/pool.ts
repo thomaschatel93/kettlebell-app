@@ -29,7 +29,12 @@ export const filterCombos = (
     if (uniqueWeights(kit).length === 0) return false;
     if (c.bells === 2 && !hasMatchedPair(kit)) return false;
     const members = c.steps.map((s) => exercises.find((e) => e.id === s.exerciseId));
-    if (members.some((m) => !m || !kitSupports(m, kit))) return false;
+    // A carry can never be a chain member. `buildMain` overrides `defaultReps` with the
+    // step reps, which pushes `prescribe` down its reps branch, and a carry has
+    // `secondsPerRep: 0` — so the step costs nothing, the UI offers "5 reps" of a walk,
+    // and the workout reports a time it will not take. Rejected here as well as in the
+    // data, because this one lies to him about the clock.
+    if (members.some((m) => !m || m.mechanic === 'carry' || !kitSupports(m, kit))) return false;
     return members.some((m) => m!.patterns.some((p) => req.patterns.includes(p)));
   });
 
