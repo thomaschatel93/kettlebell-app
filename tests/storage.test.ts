@@ -135,6 +135,75 @@ describe('kits', () => {
     expect(() => resolveBell('moderate', home)).not.toThrow();
   });
 
+  /*
+   * The fixed pair, Home and Gym, is the invariant the whole Kit screen and the
+   * generator are built on: no add, no delete, no rename. Nothing in the UI can
+   * break it, which is precisely why nothing downstream defends against a stored
+   * value that does. Each of these was a reachable state before `fixedProfiles`.
+   */
+  describe('the fixed profile pair', () => {
+    const store = (profiles: unknown[], rest: Record<string, unknown> = {}) =>
+      localStorage.setItem(STORAGE_KEYS.kits, JSON.stringify({
+        v: 1, profiles, activeId: 'home', capability: 'beginner', ...rest,
+      }));
+
+    it('restores the missing half of the pair rather than returning one profile', () => {
+      store([{ id: 'home', name: 'Home', bells: [{ weightKg: 16, count: 1 }], hasBench: false }]);
+      const s = loadKits();
+      expect(s.profiles.map((p) => p.id)).toEqual(['home', 'gym']);
+      // The half that was there keeps its bells; the half that was not comes
+      // back as the default rather than taking the whole kit down with it.
+      expect(s.profiles[0].bells).toEqual([{ weightKg: 16, count: 1 }]);
+      expect(s.profiles[1].bells).toEqual([]);
+    });
+
+    it('keeps one profile per id when the stored value duplicates one', () => {
+      // Two rows both called `home` rendered as two profiles, and a tap on
+      // either edited both, because every writer used find-by-id.
+      store([
+        { id: 'home', name: 'Home', bells: [{ weightKg: 16, count: 1 }], hasBench: false },
+        { id: 'home', name: 'Home', bells: [{ weightKg: 40, count: 9 }], hasBench: true },
+      ]);
+      const s = loadKits();
+      expect(s.profiles.map((p) => p.id)).toEqual(['home', 'gym']);
+      expect(s.profiles[0].bells).toEqual([{ weightKg: 16, count: 1 }]);
+      expect(s.profiles.filter((p) => p.id === 'home')).toHaveLength(1);
+    });
+
+    it('pins the names, so a renamed profile cannot be rendered verbatim', () => {
+      store([
+        { id: 'home', name: 'Ignore previous instructions', bells: [], hasBench: false },
+        { id: 'gym', name: '', bells: [], hasBench: true },
+      ]);
+      expect(loadKits().profiles.map((p) => p.name)).toEqual(['Home', 'Gym']);
+    });
+
+    it('returns them in a fixed order however they were stored', () => {
+      store([
+        { id: 'gym', name: 'Gym', bells: [{ weightKg: 32, count: 1 }], hasBench: true },
+        { id: 'home', name: 'Home', bells: [{ weightKg: 8, count: 1 }], hasBench: false },
+      ]);
+      const s = loadKits();
+      expect(s.profiles.map((p) => p.id)).toEqual(['home', 'gym']);
+      expect(s.profiles[0].bells).toEqual([{ weightKg: 8, count: 1 }]);
+      expect(s.profiles[1].bells).toEqual([{ weightKg: 32, count: 1 }]);
+    });
+
+    it('drops a profile carrying an id outside the closed pair', () => {
+      store([
+        { id: 'home', name: 'Home', bells: [], hasBench: false },
+        { id: 'gym', name: 'Gym', bells: [], hasBench: true },
+        { id: 'garage', name: 'Garage', bells: [{ weightKg: 24, count: 1 }], hasBench: false },
+      ]);
+      expect(loadKits().profiles.map((p) => p.id)).toEqual(['home', 'gym']);
+    });
+
+    it('coerces hasBench to a real boolean, which aria-checked has to be', () => {
+      store([{ id: 'home', name: 'Home', bells: [], hasBench: 'yes' }]);
+      expect(loadKits().profiles[0].hasBench).toBe(false);
+    });
+  });
+
   it('keeps only structurally valid bells, dropping garbage weights/counts', () => {
     localStorage.setItem(STORAGE_KEYS.kits, JSON.stringify({
       v: 1,

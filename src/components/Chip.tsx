@@ -30,8 +30,9 @@ const CHIP_EDGE_PCT = 45;
  *
  * Unselected, the chip carries a wash of its own colour so the pattern is
  * identifiable before it is chosen. Selected, it fills solid and the ink flips
- * to --bg: dark ink on all six pattern colours clears AA, worst being --pull
- * at 4.97:1.
+ * to --fill-ink, the token for text on a filled control: dark ink on all six
+ * pattern colours clears AA, worst being --pull at 4.97:1. The subtitle is why
+ * it cannot be --accent-ink - see the note in globals.css.
  */
 export function Chip({
   children,
@@ -50,7 +51,7 @@ export function Chip({
     ? {
         backgroundColor: `var(--${tone})`,
         borderColor: `var(--${tone})`,
-        color: 'var(--bg)',
+        color: 'var(--fill-ink)',
       }
     : {
         backgroundColor: `color-mix(in oklab, var(--${tone}) ${CHIP_TINT_PCT}%, var(--surface-2))`,
@@ -72,7 +73,7 @@ export function Chip({
         // Routed through --text-dim, never opacity, so .read-far can lift it.
         <span
           className="text-xs font-medium leading-tight"
-          style={{ color: selected ? 'var(--bg)' : 'var(--text-dim)' }}
+          style={{ color: selected ? 'var(--fill-ink)' : 'var(--text-dim)' }}
         >
           {subtitle}
         </span>

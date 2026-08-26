@@ -1,9 +1,8 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
 import { Card } from '@/components/Card';
-import { DEFAULT_KIT_STATE, isUnderSpecified, type KitState } from '@/lib/kit';
-import { loadKits, saveKits } from '@/lib/storage';
+import { isUnderSpecified } from '@/lib/kit';
+import { isKitHydrated, publishKit, useKit } from '@/lib/kit-store';
 import { CAPABILITIES, type Capability, type KitProfile } from '@/lib/types';
 
 /**
@@ -33,62 +32,31 @@ const bellSummary = (kit: KitProfile): string => {
 };
 
 /**
- * Ink on --accent.
+ * A control filled with the accent.
  *
- * Button uses white, which measures 3.32:1 and so clears AA only as large text
- * (>=18.66px bold). The labels here carry a small subtitle, so they take --bg
- * instead: 5.90:1, which passes as normal text. Same reasoning as the selected
- * Chip, which flips to --bg for the same reason.
+ * The ink is --fill-ink, the token globals.css defines for text on a filled
+ * control, and NOT --accent-ink. That distinction is the accessibility of this
+ * screen: --accent-ink is white, 3.32:1 on the accent, which clears AA only as
+ * large text (>=18.66px bold - what ACCENT_SAFE_TYPE pins on Button). Every
+ * filled control here carries a small subtitle line, so it needs the ink that
+ * passes at any size. `tokens.test.ts` pins the token pair and
+ * `kit-editor.test.tsx` pins this use of it.
+ *
+ * Button and Chip are deliberately not reused for these controls. Button has no
+ * selected state and no subtitle slot, and forces a single 20px bold label;
+ * Chip's `tone` is typed as a movement Pattern on purpose, so a weight or a
+ * place to train has no legal tone, and colouring a 24 kg chip --hinge would
+ * misuse hues that carry movement identity and nothing else.
  */
-const FILLED = { backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: 'var(--bg)' } as const;
+const FILLED = {
+  backgroundColor: 'var(--accent)',
+  borderColor: 'var(--accent)',
+  color: 'var(--fill-ink)',
+} as const;
 
 const SHELL =
   'tap-target w-full rounded-[var(--radius)] border border-[var(--border)] ' +
   'bg-[var(--surface-2)] text-left transition-opacity active:opacity-80';
-
-/* ---------------------------------------------------------------------------
-   The kit as an external store.
-
-   localStorage does not exist while the server renders, so reading it during
-   render splits the two renders apart and produces a hydration mismatch that
-   jsdom never sees and a real phone always does. `useSyncExternalStore` is the
-   primitive for exactly this: the hydration render takes `getServerSnapshot`,
-   and the stored kit arrives once the tree is committed and React has
-   subscribed. (An effect calling setState does the same job, but cascades an
-   extra render and `react-hooks/set-state-in-effect` rejects it.)
---------------------------------------------------------------------------- */
-
-const listeners = new Set<() => void>();
-let snapshot: KitState | null = null;
-
-/**
- * What the server renders, and what the client renders while hydrating, so the
- * two agree. Its identity is stable and it is never handed out for mutation, so
- * it cannot poison DEFAULT_KIT_STATE.
- */
-const HYDRATION_SNAPSHOT: KitState = structuredClone(DEFAULT_KIT_STATE);
-
-function subscribe(onStoreChange: () => void): () => void {
-  // The commit is the first moment localStorage may be read. React re-checks
-  // the snapshot straight after subscribing, so refreshing here is enough to
-  // pull the stored kit in without notifying anyone mid-subscribe.
-  if (listeners.size === 0) snapshot = loadKits();
-  listeners.add(onStoreChange);
-  return () => {
-    listeners.delete(onStoreChange);
-  };
-}
-
-/** Cached, because useSyncExternalStore needs a stable reference between calls. */
-const getSnapshot = (): KitState => (snapshot ??= loadKits());
-const getServerSnapshot = (): KitState => HYDRATION_SNAPSHOT;
-
-/** Every mutation writes through, so nothing ever lives only in React state. */
-function publish(next: KitState): void {
-  snapshot = next;
-  saveKits(next);
-  for (const listener of [...listeners]) listener();
-}
 
 /**
  * The first screen with anything at stake: which bells exist decides every
@@ -100,20 +68,18 @@ function publish(next: KitState): void {
  * it. There is deliberately no add or delete control here to reintroduce it.
  */
 export function KitEditor() {
-  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const state = useKit();
 
-  // True once the real kit is in hand. Only the hydration render is handed
-  // HYDRATION_SNAPSHOT itself, so this needs no state of its own. It keeps the
-  // live region quiet until there is something true to say, rather than
-  // announcing an empty kit at every page load and correcting itself.
-  const hydrated = state !== HYDRATION_SNAPSHOT;
+  // Keeps the live region quiet until there is something true to say, rather
+  // than announcing an empty kit on every page load and correcting itself.
+  const hydrated = isKitHydrated(state);
 
   // Storage guarantees activeId names a profile that exists; the fallback is
   // only here because the type cannot know that.
   const active = state.profiles.find((p) => p.id === state.activeId) ?? state.profiles[0];
 
   const mapActive = (f: (p: KitProfile) => KitProfile) =>
-    publish({ ...state, profiles: state.profiles.map((p) => (p.id === active.id ? f(p) : p)) });
+    publishKit({ ...state, profiles: state.profiles.map((p) => (p.id === active.id ? f(p) : p)) });
 
   /** A weight already in the kit gains a count. Two rows of 16 kg is not a thing. */
   const addBell = (weightKg: number) =>
@@ -156,14 +122,14 @@ export function KitEditor() {
                 key={p.id}
                 type="button"
                 aria-pressed={selected}
-                onClick={() => publish({ ...state, activeId: p.id })}
+                onClick={() => publishKit({ ...state, activeId: p.id })}
                 style={selected ? FILLED : undefined}
                 className={`${SHELL} px-4 py-3`}
               >
                 <span className="block text-base font-bold leading-tight">{p.name}</span>
                 <span
                   className="block text-sm leading-tight"
-                  style={{ color: selected ? 'var(--bg)' : 'var(--text-dim)' }}
+                  style={{ color: selected ? 'var(--fill-ink)' : 'var(--text-dim)' }}
                 >
                   {bellSummary(p)}
                 </span>
@@ -275,27 +241,42 @@ export function KitEditor() {
           </p>
         </div>
 
-        <div role="group" aria-labelledby="capability-heading" className="flex flex-col gap-2">
+        {/*
+          A radiogroup of real radios, not a row of pressed buttons. These three
+          are mutually exclusive - picking one unpicks the others - and that is
+          what a screen reader should be told, along with "2 of 3". Native
+          inputs come with the arrow-key behaviour a radiogroup is expected to
+          have; the input is visually hidden and the label carries the look and
+          the 44px target, so the focus ring is drawn from the label instead.
+        */}
+        <div role="radiogroup" aria-labelledby="capability-heading" className="flex flex-col gap-2">
           {CAPABILITIES.map((capability) => {
             const selected = capability === state.capability;
             const { label, hint } = CAPABILITY_COPY[capability];
             return (
-              <button
+              <label
                 key={capability}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => publish({ ...state, capability })}
                 style={selected ? FILLED : undefined}
-                className={`${SHELL} px-4 py-3`}
+                className={`${SHELL} flex cursor-pointer flex-col justify-center px-4 py-3
+                  has-[:focus-visible]:outline has-[:focus-visible]:outline-[3px]
+                  has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--accent)]`}
               >
+                <input
+                  type="radio"
+                  name="capability"
+                  value={capability}
+                  checked={selected}
+                  onChange={() => publishKit({ ...state, capability })}
+                  className="sr-only"
+                />
                 <span className="block text-base font-bold leading-tight">{label}</span>
                 <span
                   className="block text-sm leading-tight"
-                  style={{ color: selected ? 'var(--bg)' : 'var(--text-dim)' }}
+                  style={{ color: selected ? 'var(--fill-ink)' : 'var(--text-dim)' }}
                 >
                   {hint}
                 </span>
-              </button>
+              </label>
             );
           })}
         </div>

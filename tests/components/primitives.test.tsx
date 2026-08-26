@@ -80,6 +80,17 @@ describe('Chip', () => {
     expect(screen.getByText('back, biceps').getAttribute('style')).toContain('var(--text-dim)');
   });
 
+  it('inks a selected chip with --fill-ink, the ink that is legal at subtitle size', () => {
+    // Not --accent-ink: white would be 3.32:1 on the accent and worse on
+    // several patterns, and this chip carries a subtitle. One rule, one token -
+    // see the note in globals.css and the matching assertion on the Kit screen.
+    render(<Chip tone="pull" subtitle="back, biceps" selected onClick={() => {}}>Pull</Chip>);
+    const chip = screen.getByRole('button');
+    expect(chip.getAttribute('style')).toContain('var(--fill-ink)');
+    expect(chip.getAttribute('style')).not.toContain('--accent-ink');
+    expect(screen.getByText('back, biceps').getAttribute('style')).toContain('var(--fill-ink)');
+  });
+
   it('keeps the tint at 8%, above which the subtitle fails AA on the bright patterns', () => {
     // 16% put --text-dim at 4.46:1 on --hinge. 8% measures 5.19:1.
     expect(CHIP_TINT_PCT).toBeLessThanOrEqual(8);

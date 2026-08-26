@@ -46,6 +46,36 @@ describe('--surface is pinned to the colour the images were flattened onto', () 
   });
 });
 
+describe('the two inks, and which is legal where', () => {
+  /**
+   * White on --accent measures 3.32:1. That clears WCAG AA only as large text
+   * (>=18.66px bold), which is what ACCENT_SAFE_TYPE pins on the primary
+   * Button. Every other filled control in the app carries a subtitle or a
+   * caption at small sizes, so it needs the near-black ink instead - 5.90:1 on
+   * the accent, 4.97:1 at worst on the pattern colours.
+   *
+   * Before this token the rule lived in a comment in Button.tsx telling the
+   * next reader to invent a second ink, and the Kit screen duly invented its
+   * own hardcoded one. Two statements of one accessibility rule in two files is
+   * how a design system forks.
+   */
+  it('offers a second ink for text that is not large', () => {
+    expect(decl(root, '--fill-ink')).toBeDefined();
+  });
+
+  it('keeps the two distinct, so the choice between them is a real choice', () => {
+    expect(decl(root, '--fill-ink')).not.toBe(decl(root, '--accent-ink'));
+  });
+
+  it('leaves --accent-ink as the white one, the large-text case', () => {
+    expect(decl(root, '--accent-ink')).toBe('#ffffff');
+  });
+
+  it('makes --fill-ink the dark ground, which is what measures 5.90:1 on --accent', () => {
+    expect(decl(root, '--fill-ink')).toBe('var(--bg)');
+  });
+});
+
 describe('the 44px tap floor', () => {
   /** A wet thumb on a small control misses. */
   it('is 44px, the minimum a damp thumb reliably hits', () => {

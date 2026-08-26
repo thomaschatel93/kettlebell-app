@@ -87,28 +87,58 @@ function isKitProfile(x: unknown): x is KitProfile {
  * very next frame - `uniqueWeights`/`resolveBell` read `.weightKg`/`.count` off
  * every element unguarded. Drop anything that isn't a real bell rather than
  * carry rubbish one step further downstream.
+ *
+ * `hasBench` is coerced too: nothing validated it, so a stored `"yes"` reached
+ * the Kit screen and came back out as `aria-checked="yes"`, which is not a
+ * state any assistive technology can report.
  */
 function sanitizeKitProfile(p: KitProfile): KitProfile {
-  return { ...p, bells: p.bells.filter(isValidBell) };
+  return { ...p, bells: p.bells.filter(isValidBell), hasBench: p.hasBench === true };
+}
+
+/**
+ * The two profiles are fixed: Home and Gym, in that order, named that way, one
+ * each. Not addable, deletable or renameable - the Kit screen offers no control
+ * for any of it, and the generator is built on the guarantee.
+ *
+ * Until now only `id` and `bells` were checked, so a hand-edited or half-written
+ * stored value could still produce a one-profile kit (the Kit screen would then
+ * offer one place to train), two profiles both called `home` (one tap editing
+ * what looks like two separate kits), or a renamed profile rendered verbatim.
+ * None of those are reachable through the UI, which is exactly why nothing
+ * downstream defends against them.
+ *
+ * This repairs rather than discards, which is the house rule everywhere else in
+ * this file: take each expected profile's stored data if a valid one is there,
+ * otherwise the default, and pin the id, order and name regardless. A user whose
+ * stored value has a cosmetic problem keeps the bells they own.
+ */
+function fixedProfiles(stored: KitProfile[]): KitProfile[] {
+  return DEFAULT_KIT_STATE.profiles.map((fallback) => {
+    // `find` takes the FIRST match, so a duplicated id contributes once.
+    const match = stored.find((p) => p.id === fallback.id);
+    return match
+      ? { ...sanitizeKitProfile(match), id: fallback.id, name: fallback.name }
+      : structuredClone(fallback);
+  });
 }
 
 export function loadKits(): KitState {
   const raw = readRaw(KEYS.kits);
   if (!isPlainObject(raw) || raw.v !== VERSION) return structuredClone(DEFAULT_KIT_STATE);
 
-  // A null/garbage entry inside `profiles` would crash both the `.some()` below
+  // A null/garbage entry inside `profiles` would crash both the id lookup below
   // and every downstream `profiles.find(...)`. Filter before touching either.
-  const profiles = (Array.isArray(raw.profiles) ? raw.profiles : [])
-    .filter(isKitProfile)
-    .map(sanitizeKitProfile);
-  if (profiles.length === 0) return structuredClone(DEFAULT_KIT_STATE);
+  // `fixedProfiles` then guarantees exactly Home and Gym, in order, whatever was
+  // stored, so no caller has to wonder which profiles exist.
+  const stored = (Array.isArray(raw.profiles) ? raw.profiles : []).filter(isKitProfile);
+  const profiles = fixedProfiles(stored);
 
   // A stored activeId naming no existing profile would crash every downstream
-  // find(). Repair it instead - and never let the repair itself produce
-  // `undefined` if profiles[0].id somehow falls outside the closed id set.
-  const firstId = profiles[0].id;
-  const fallbackId: 'home' | 'gym' = firstId === 'home' || firstId === 'gym' ? firstId : 'home';
-  const activeId = profiles.some((p) => p.id === raw.activeId) ? (raw.activeId as 'home' | 'gym') : fallbackId;
+  // find(). Repair it instead. Both ids always exist now, so this is a plain
+  // membership test of the closed set rather than a search of the array.
+  const activeId: 'home' | 'gym' =
+    raw.activeId === 'home' || raw.activeId === 'gym' ? raw.activeId : DEFAULT_KIT_STATE.activeId;
 
   const capability = (CAPABILITIES as readonly string[]).includes(raw.capability as string)
     ? (raw.capability as Capability)
@@ -117,6 +147,13 @@ export function loadKits(): KitState {
   return { v: VERSION, profiles, activeId, capability };
 }
 export const saveKits = (state: KitState): boolean => write(KEYS.kits, { ...state, v: VERSION });
+
+/**
+ * The one key the kit lives under, exported so `kit-store.ts` can tell a
+ * `storage` event about the kit from one about history or prefs. Exported as a
+ * value rather than retyped there, so the two cannot drift apart.
+ */
+export const KITS_KEY: string = KEYS.kits;
 
 /**
  * The minimum an entry needs to be worth keeping at all. `id` identifies it;

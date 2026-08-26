@@ -12,8 +12,9 @@ type Variant = 'primary' | 'ghost' | 'danger';
  * 20px/700 is not a style choice, it is the thing keeping this button
  * accessible, and `primitives.test.tsx` asserts the primary variant carries it.
  *
- * If a small label on --accent is ever needed, add a second ink token. Do not
- * shrink this.
+ * If a small label on --accent is ever needed, that is what --fill-ink is for:
+ * near-black, 5.90:1, legal at any size. Use it there rather than shrinking
+ * this, and see the note in globals.css for which ink goes where.
  */
 export const ACCENT_SAFE_TYPE = 'text-xl font-bold';
 
