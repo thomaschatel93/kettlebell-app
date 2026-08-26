@@ -25,6 +25,14 @@ export const metadata: Metadata = {
    * clock, and nothing in this layout reserves room at the top for it.
    */
   appleWebApp: { title: "Kettlebell", capable: true, statusBarStyle: "default" },
+  /*
+   * `capable: true` above emits the standardised `mobile-web-app-capable`. The
+   * legacy Apple-prefixed name is the one every iOS before 16.4 reads, and it
+   * is not emitted for us, so it goes in by hand. Without both, an older iPhone
+   * adds the app to the Home Screen and then opens it inside browser chrome,
+   * which is the single most visible way this task can fail.
+   */
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 export const viewport: Viewport = {

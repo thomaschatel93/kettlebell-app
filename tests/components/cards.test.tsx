@@ -25,6 +25,20 @@ describe('ExerciseCard', () => {
     screen.getByText(/left/i);
   });
 
+  /**
+   * Sized so it can be READ across the room, not merely seen.
+   *
+   * At 18px the pill was legible as a pill from a metre and the word inside it
+   * was not: you could tell a side had been named and not which one. That is
+   * the one misreading on this screen that costs a whole set on the wrong arm,
+   * so the size is pinned rather than left to whoever next tidies the classes.
+   */
+  it('sets the side at heading size, not tag size', () => {
+    render(<ExerciseCard step={step({ side: 'right' })} exercise={ex('a')} />);
+    const pill = screen.getByText(/right/i);
+    expect(pill.className).toMatch(/\btext-(3xl|4xl|5xl|6xl)\b/);
+  });
+
   it('shows seconds for a carry', () => {
     render(<ExerciseCard step={step({ reps: undefined, seconds: 40 })} exercise={ex('a')} />);
     screen.getByText('40 seconds');

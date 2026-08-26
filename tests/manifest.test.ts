@@ -64,6 +64,11 @@ describe('the layout ships what the browser needs to find all that', () => {
     expect(layout).toContain('/icons/apple-touch-icon.png');
   });
 
+  it('declares itself web-app capable under both the standard and the Apple name', () => {
+    expect(layout).toContain('capable: true');
+    expect(layout).toContain('"apple-mobile-web-app-capable": "yes"');
+  });
+
   /*
    * `viewport` is its own export in Next 16, not a field on `metadata`. Written
    * from memory as part of `metadata` it is dropped in silence, taking

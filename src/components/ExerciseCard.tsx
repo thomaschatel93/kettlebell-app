@@ -88,9 +88,19 @@ export function ExerciseCard({
 
   return (
     <Card className="flex flex-col gap-4">
+      {/*
+        Sized like a heading, not like a tag.
+
+        At a metre this was the failure the whole card exists to prevent. At
+        18px the pill was legible as a pill but the WORD was not: you could see
+        that a side was named and not which one, and a misread here is a whole
+        set on the wrong arm. It is now larger than the bell and the rep count
+        beside it, which is the right order - he knows the move, he does not
+        know which side without being told.
+      */}
       {step.side && (
         <p
-          className="self-start rounded-full border px-4 py-1.5 text-lg font-bold uppercase tracking-wide"
+          className="self-start rounded-full border px-4 py-1.5 text-3xl font-bold uppercase tracking-wide"
           style={{
             backgroundColor: 'color-mix(in oklab, var(--accent) 16%, var(--surface-2))',
             borderColor: 'color-mix(in oklab, var(--accent) 55%, var(--border))',
@@ -106,11 +116,12 @@ export function ExerciseCard({
       <h1 className="text-4xl font-bold leading-tight tracking-tight text-[var(--text)]">{step.name}</h1>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-[var(--radius)] bg-[var(--surface-2)] px-4 py-2 text-2xl font-bold tabular-nums text-[var(--text)]">
+        {/* 30px, not 24: this is the number he counts against mid-set. */}
+        <span className="rounded-[var(--radius)] bg-[var(--surface-2)] px-4 py-2 text-3xl font-bold tabular-nums text-[var(--text)]">
           {step.bellKg === null ? 'Bodyweight' : `${step.bellKg} kg`}
         </span>
         {prescription && (
-          <span className="rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 text-2xl font-bold tabular-nums text-[var(--fill-ink)]">
+          <span className="rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 text-3xl font-bold tabular-nums text-[var(--fill-ink)]">
             {prescription}
           </span>
         )}
