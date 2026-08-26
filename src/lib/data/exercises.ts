@@ -25,7 +25,14 @@ import type { Exercise } from '@/lib/types';
  * - Ballistics are roughly 2s a rep, grinds roughly 4s, carries are timed and
  *   carry `secondsPerRep: 0`.
  * - Exactly one of `defaultReps` or `defaultWorkSeconds` is ever set.
- * - `image` is null for all 34; Task 16 fills in the sliced ones.
+ * - `image` points at the sliced or imported still in `public/exercises`, and is
+ *   null only where nothing shippable exists: Clean and Press, whose sheet cell
+ *   shows two bells for a one-bell single-arm lift, and High Pull, whose cell is
+ *   drawn two-handed against cues that say one hand on the handle. Regenerate
+ *   both. `npm run media:todo` lists what is outstanding.
+ * - `imagePanels` counts the panels in the file that actually ships, not the
+ *   number the movement deserves. Most ballistics ship as a single position; the
+ *   two exercises with no picture keep the count they still need.
  */
 export const EXERCISES: Exercise[] = [
   {
@@ -42,8 +49,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/two-hand-swing.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Bell a forearm’s length in front of your toes.', 'Shoulders back, spine long.'],
       execution: ['Hike the bell back past your knees.', 'Snap the hips through and stand tall.', 'Let the bell float, do not lift it.'],
@@ -64,7 +71,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/goblet-squat.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hold the bell by the horns at chest height, elbows tucked in.', 'Feet a little wider than your hips, toes turned out slightly.'],
@@ -86,7 +93,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/deadlift.webp',
     imagePanels: 1,
     cues: {
       setup: ['Bell between your feet, handle in line with your ankles.', 'Hips back, shins near vertical, chest proud.'],
@@ -130,7 +137,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/front-lunge.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hold the bell at your chest, elbows tucked in.', 'Stand tall with your feet under your hips.'],
@@ -152,7 +159,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/sumo-deadlift.webp',
     imagePanels: 1,
     cues: {
       setup: ['Feet wide, toes turned out, bell between the arches.', 'Hinge back and grip the handle with both hands.'],
@@ -174,8 +181,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/single-arm-swing.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Bell a forearm’s length in front of your toes.', 'Grip with one hand, free arm loose at your side.'],
       execution: ['Hike the bell back past your knees.', 'Snap the hips through and stand tall.', 'Resist the twist so both hips stay facing forward.'],
@@ -196,7 +203,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/overhead-press.webp',
     imagePanels: 1,
     cues: {
       setup: ['Bell in the front rack, forearm vertical, elbow tight to the ribs.', 'Feet hip width, glutes and stomach braced.'],
@@ -218,7 +225,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/russian-twist.webp',
     imagePanels: 1,
     cues: {
       setup: ['Sit with the knees bent and the heels on the floor.', 'Hold the bell close to your chest with a long spine.'],
@@ -240,7 +247,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: true,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/step-up.webp',
     imagePanels: 1,
     cues: {
       setup: ['Set a bench or box at about knee height and stand close to it.', 'Hold one bell in the rack or hanging at your side.'],
@@ -262,7 +269,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/bent-over-row.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hinge forward until the torso is near parallel with the floor.', 'Free hand on your thigh, spine long, bell hanging under the shoulder.'],
@@ -284,8 +291,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/snatch.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Bell a forearm’s length in front of you, one hand on the handle.', 'Hinge back, chest proud, free arm out of the way.'],
       execution: ['Hike the bell back, then snap the hips hard.', 'Pull the elbow high and close, then punch your hand through the handle.', 'Catch it locked overhead with a straight wrist, then guide it back down.'],
@@ -306,7 +313,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/halo.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hold the bell upside down by the horns at chest height.', 'Feet hip width, ribs down, glutes braced.'],
@@ -328,7 +335,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/reverse-lunge.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hold the bell at your chest, elbows tucked in.', 'Stand tall with your feet under your hips.'],
@@ -350,7 +357,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/squat-to-press.webp',
     imagePanels: 2,
     cues: {
       setup: ['Hold the bell by the horns at chest height.', 'Feet a little wider than your hips, toes turned out slightly.'],
@@ -372,8 +379,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/clean.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Bell just outside the foot on the working side.', 'Hinge back and grip the handle, free arm out for balance.'],
       execution: ['Hike the bell back, then snap the hips.', 'Keep the bell close and spear your hand through the handle.', 'Land it in the rack: forearm vertical against the ribs, elbow tucked, wrist straight.'],
@@ -394,7 +401,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/racked-front-squat.webp',
     imagePanels: 1,
     cues: {
       setup: ['Clean one bell into the rack, forearm vertical, elbow tight to the ribs.', 'Feet a little wider than your hips, toes turned out slightly.'],
@@ -416,8 +423,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/push-press.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Bell in the front rack, forearm vertical, elbow tight to the ribs.', 'Feet hip width, weight through the whole foot.'],
       execution: ['Dip a few inches at the knees with the torso upright.', 'Drive out of the dip and let the legs start the bell moving.', 'Finish with the arm locked by your ear, then lower to the rack.'],
@@ -438,7 +445,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/floor-press.webp',
     imagePanels: 1,
     cues: {
       setup: ['Lie on your back with the knees bent and the feet flat.', 'Bell in one hand at the chest, opposite arm flat on the floor.'],
@@ -460,7 +467,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/single-leg-deadlift.webp',
     imagePanels: 1,
     cues: {
       setup: ['Bell on the floor in front of the standing foot.', 'Stand on one leg with a soft knee, the other leg ready to travel back.'],
@@ -482,7 +489,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/farmers-carry.webp',
     imagePanels: 1,
     cues: {
       setup: ['A bell either side, handles in line with your feet.', 'Stand up with a flat back.'],
@@ -504,7 +511,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/suitcase-carry.webp',
     imagePanels: 1,
     cues: {
       setup: ['One bell at your side, handle in line with your foot.', 'Stand up with a flat back, free arm hanging.'],
@@ -526,7 +533,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/racked-carry.webp',
     imagePanels: 1,
     cues: {
       setup: ['Bring one bell into the rack with both hands, forearm vertical against the ribs.', 'Elbow tight to the body, wrist straight.'],
@@ -548,8 +555,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 3,
+    image: '/exercises/turkish-get-up.webp',
+    imagePanels: 2,
     cues: {
       setup: ['Lie on your back with the bell pressed up over the working shoulder.', 'Bend the knee on that same side with the foot flat; the other arm and leg out at forty-five degrees.'],
       execution: ['Roll onto the free elbow, then up onto the free hand.', 'Bridge the hips up and sweep the straight leg back into a kneeling position.', 'Stand up, then reverse every step in the same order to get back down.'],
@@ -570,8 +577,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/windmill.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Press one bell overhead and lock the arm out with a straight wrist.', 'Turn both feet about forty-five degrees away from the bell side.'],
       execution: ['Push the loaded hip out to the side and hinge sideways.', 'Reach the free hand down towards the inside of the front foot.', 'Keep your eyes on the bell and the overhead arm vertical, then stand up.'],
@@ -592,7 +599,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/renegade-row.webp',
     imagePanels: 1,
     cues: {
       setup: ['Set two bells shoulder width apart, handles in line with each other.', 'Take a high plank on the handles with the feet wide for a stable base.'],
@@ -636,7 +643,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: true,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/bulgarian-split-squat.webp',
     imagePanels: 1,
     cues: {
       setup: ['Rest the rear foot on a bench behind you, laces down.', 'Bell in the rack on one side, front foot far enough forward to stack the knee over the ankle.'],
@@ -658,8 +665,8 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
-    imagePanels: 2,
+    image: '/exercises/figure-8.webp',
+    imagePanels: 1,
     cues: {
       setup: ['Feet a little wider than your hips in an athletic stance.', 'Hinge back with a flat back, bell in one hand in front of you.'],
       execution: ['Pass the bell backwards between your legs.', 'Meet it with the other hand behind the knee and bring it round the outside.', 'Stay hinged with a flat back the whole way through.'],
@@ -680,7 +687,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/goblet-carry.webp',
     imagePanels: 1,
     cues: {
       setup: ['Hold the bell by the horns at chest height, elbows tucked in.', 'Stand tall with the ribs down and the shoulders back.'],
@@ -702,7 +709,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/overhead-carry.webp',
     imagePanels: 1,
     cues: {
       setup: ['Press one bell overhead and lock the elbow, wrist in line with the forearm.', 'Shoulder packed down, ribs down, free arm out for balance.'],
@@ -724,7 +731,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/dead-row.webp',
     imagePanels: 1,
     cues: {
       setup: ['Bell on the floor just outside the foot on the working side.', 'Hinge back with a flat back until the torso is near parallel with the floor, free hand on your thigh.'],
@@ -746,7 +753,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/floor-pullover.webp',
     imagePanels: 1,
     cues: {
       setup: ['Lie on your back with the knees bent and the feet flat.', 'Hold the bell by the horns with both hands over your chest, arms straight and the elbows soft.'],
@@ -768,7 +775,7 @@ export const EXERCISES: Exercise[] = [
     needsBench: false,
     warmupSuitable: false,
     cooldownSuitable: false,
-    image: null,
+    image: '/exercises/half-kneeling-press.webp',
     imagePanels: 1,
     cues: {
       setup: ['Kneel on the knee on the same side as the bell, the other foot flat in front, both knees at about ninety degrees.', 'Bring the bell into the rack with both hands: forearm vertical, elbow tight to the ribs, wrist straight.'],
