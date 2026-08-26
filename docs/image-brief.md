@@ -48,7 +48,7 @@ whole missing pattern.
 | 22 | Farmer's Carry | Carry | walking, one bell in each hand at the sides, shoulders down, tall spine |
 | 23 | Suitcase Carry | Carry | walking, one bell in one hand only, torso resisting the lean, shoulders level |
 | 24 | Racked Carry | Carry | walking, one bell in the front rack position, elbow tight to the ribs |
-| 25 | Turkish Get-Up | Core | 2-panel: lying press-up to elbow, then the tall kneeling position, bell locked overhead throughout |
+| 25 | Turkish Get-Up | Core | **3-panel**: lying press-up to elbow, then the tall kneeling position, then standing, bell locked overhead throughout. Two panels cannot carry a six-position movement |
 | 26 | Windmill | Core | bell locked overhead, opposite hand reaching to the inside of the front foot, eyes on the bell |
 | 27 | Renegade Row | Pull | high plank on two bells, one bell rowed to the ribs, hips square and level |
 | 28 | High Pull | Pull | bell at chest height, elbow high and behind, hips fully extended |

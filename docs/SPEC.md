@@ -249,8 +249,15 @@ two accessories from different patterns, cycled for three to five rounds.
 **Ordering.** Ballistics first, heavy grinds next, core and carries last, and no
 two adjacent exercises sharing a primary pattern. Because a circuit repeats, the
 last item of a round is adjacent to the first item of the next, so the wrap-around
-counts too. Use a largest-remaining-group greedy, which is complete whenever a
-valid ordering exists. A set of four hinges has no valid arrangement, so the rule
+counts too: the ordering problem is a circle, not a line.
+
+That distinction has teeth. A largest-remaining-group greedy is complete for a
+line but not for a circle, and no rotation can repair a wrap clash, because
+rotation preserves every circular adjacency. The bound on feasibility differs too:
+a line needs no pattern to exceed `ceil(n/2)` of the slots, a circle needs
+`floor(n/2)`. So the ordering uses that greedy made complete by backtracking, with
+the plain greedy kept as the fallback for a set that admits no circular ordering
+at all. A set of four hinges has no valid arrangement, so the rule
 is stated honestly: **no two adjacent share a primary pattern whenever the
 selected set admits such an ordering.**
 

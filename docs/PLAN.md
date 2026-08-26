@@ -1208,7 +1208,31 @@ git add -A && git commit -m "feat: prescribe reps and rest from effort, with the
 `orderCircuit` is a full rewrite. The previous single-pass fix-up left an adjacent
 duplicate in 15% of cases that had a valid ordering, destroyed the ballistic-first
 ordering in 35%, and ignored the wrap-around entirely, where a circuit's last item
-meets its first on the next round. The replacement is a largest-remaining-group
+meets its first on the next round.
+
+> **CORRECTION, applied during implementation on 2026-08-25.** The replacement first
+> written below was ALSO wrong, in two ways, both confirmed by three independent
+> brute-force checks:
+>
+> 1. **The closing rotation cannot repair a wrap clash.** Rotation is a symmetry of a
+>    cycle, so it preserves every circular adjacency. It only moves the clashing pair
+>    into the interior, and in doing so destroys the no-adjacent-duplicates invariant
+>    the greedy had just established. Verified: every rotation of `[A,B,A,C,A]` has a
+>    broken interior.
+> 2. **The `solvable` predicate in the test used `Math.ceil(n/2)`,** which is the bound
+>    for arranging a line. The bound for arranging a CIRCLE is `Math.floor(n/2)`. Over
+>    1,715 multisets, `floor` mispredicts 0 and `ceil` mispredicts 330. The test was
+>    asserting circular validity on cases that were arithmetically impossible.
+>
+> The shipped `src/lib/select.ts` therefore keeps the largest-remaining-group greedy as
+> `greedyOrder`, a safe fallback complete for a LINE, and adds `searchOrder`: the same
+> greedy made complete for the CIRCLE by backtracking, with memoised dead states and
+> only the first unused item of each pattern group tried. It was verified exhaustively
+> against brute force — 11,976 solvable cases up to n=12, zero wrong, zero dropped —
+> and runs in under 2ms worst case. Read the shipped file, not the block below, if the
+> two ever disagree.
+
+The replacement is a largest-remaining-group
 greedy, which is complete whenever a valid ordering exists.
 
 The weighting is deliberately arithmetic. A fresh candidate scores in `[0.5, 1.5)`
@@ -1237,11 +1261,16 @@ const adjacentOk = (out: Exercise[], wrap: boolean): boolean => {
   return true;
 };
 
-/** A set admits an ordering when no single pattern holds more than half the slots. */
+/**
+ * A set admits a CIRCULAR ordering when no single pattern holds more than
+ * floor(n/2) of the slots. Do not use ceil here: ceil is the bound for arranging a
+ * line, and a circuit is a circle. Brute-forced over 1,715 multisets, floor
+ * mispredicts 0 and ceil mispredicts 330.
+ */
 const solvable = (items: Exercise[]): boolean => {
   const counts = new Map<Pattern, number>();
   for (const e of items) counts.set(e.patterns[0], (counts.get(e.patterns[0]) ?? 0) + 1);
-  return Math.max(...counts.values()) <= Math.ceil(items.length / 2);
+  return Math.max(...counts.values()) <= Math.floor(items.length / 2);
 };
 
 describe('historyWeight', () => {
@@ -1882,9 +1911,22 @@ git add -A && git commit -m "fix: stop the round rest leaking across block bound
 - Produces: `GenerateInput`, `generate(input): Workout`
 
 The whole engine behind one pure function. The fitting strategy is the corrected
-one from spec 4.5: build the ancillary blocks first, measure what they cost, give
-the main block the true remainder, then search rounds and item counts together and
-rank on pattern coverage before time.
+one from spec 4.5: build the ancillary blocks first, then search rounds and item
+counts together and rank on pattern coverage before time.
+
+> **CORRECTION, applied before implementation on 2026-08-25.** An earlier version of
+> this task scored each candidate on `blockSeconds(mainPlan)` against a target derived
+> as `total - blockSeconds(warm) - blockSeconds(cool)`. That is a parallel arithmetic
+> that drifts from what `buildSteps` actually emits: the two agree exactly within one
+> block, but across three blocks they differ by the sum of the boundary item rests,
+> measured at 45 seconds on a realistic plan, always running LONG.
+>
+> Maintaining a second way to compute the same number is precisely the class of bug
+> that made the original engine miss its budget by up to 57%. So the search now costs
+> the WHOLE workout by calling `buildSteps` on the full three-block candidate and
+> summing `estSeconds` — the same number the returned `Workout` reports. The search
+> space is at most 5 counts times 12 rounds, so the cost is negligible and the
+> estimate is correct by construction rather than by agreement.
 
 `shortOfBudget` is an honest escape hatch. A 60-minute complex genuinely cannot be
 filled by any sane number of rounds of a three-move chain. Rather than lie, the
@@ -2158,9 +2200,18 @@ interface Candidate { plan: BlockPlan; coverage: number; dev: number }
 const better = (a: Candidate, b: Candidate | null): boolean =>
   b === null || a.coverage > b.coverage || (a.coverage === b.coverage && a.dev < b.dev);
 
+/**
+ * The true cost of a whole workout: what buildSteps will actually emit, summed.
+ * Never sum blockSeconds across blocks — that misses the boundary rests and always
+ * reads short.
+ */
+const wholeWorkoutSeconds = (plans: BlockPlan[]): number =>
+  buildSteps(plans).reduce((a, s) => a + s.estSeconds, 0);
+
 function buildMain(
   format: Format, pool: Exercise[], combos: Combo[], req: WorkoutRequest, kit: KitProfile,
   history: HistoryEntry[], target: number, seed: number,
+  cost: (plan: BlockPlan) => number,
 ): { plan: BlockPlan; format: Format } {
   const search = SEARCH[format];
   const between = betweenRoundsRest(format, req.effort);
@@ -2195,7 +2246,8 @@ function buildMain(
 
     for (const rounds of search.rounds) {
       const plan: BlockPlan = { block: 'Main', rounds, betweenRoundsRest: between, items };
-      const candidate: Candidate = { plan, coverage, dev: deviation(blockSeconds(plan), target) };
+      // Cost the WHOLE workout, not this block in isolation.
+      const candidate: Candidate = { plan, coverage, dev: deviation(cost(plan), target) };
       if (better(candidate, best)) best = candidate;
       if (rd * rounds > target * 1.5) break;   // no point searching further out
     }
@@ -2204,10 +2256,18 @@ function buildMain(
   if (!best) {
     return format === 'circuit'
       ? { plan: { block: 'Main', rounds: 1, betweenRoundsRest: between, items: [] }, format }
-      : buildMain('circuit', pool, combos, req, kit, history, target, seed);
+      : buildMain('circuit', pool, combos, req, kit, history, target, seed, cost);
   }
 
-  return { plan: trimToBudget(best.plan, target), format };
+  // Trim on the between-rounds rest, then keep the trim only if it actually helped.
+  // trimToBudget rounds to five seconds before clamping, so it can overshoot; and it
+  // solves for the main block alone, which is not quite the whole-workout target.
+  const trimmed = trimToBudget(best.plan, target - (cost(best.plan) - blockSeconds(best.plan)));
+  const chosen = deviation(cost(trimmed), target) < deviation(cost(best.plan), target)
+    ? trimmed
+    : best.plan;
+
+  return { plan: chosen, format };
 }
 
 const mainIdsOf = (plan: BlockPlan) => [...new Set(plan.items.map((i) => i.exercise.id))].sort();
@@ -2222,19 +2282,21 @@ export function generate(input: GenerateInput): Workout {
     warmupPool(exercises, kit), kit, 'Warm-up', nominal.warmupSeconds, 15, request.effort, request.seed + 101);
   const cool = buildAncillary(
     cooldownPool(exercises, kit), kit, 'Cool-down', nominal.cooldownSeconds, 10, request.effort, request.seed + 202);
-  const mainTarget = total - blockSeconds(warm) - blockSeconds(cool);
 
   const pool = filterPool(exercises, request, kit);
   const usableCombos = filterCombos(combos, exercises, request, kit);
   const wanted = chooseFormat(request, usableCombos.length > 0);
 
+  // Every candidate is costed as the whole workout it would produce.
+  const cost = (plan: BlockPlan) => wholeWorkoutSeconds([warm, plan, cool]);
+
   let seed = request.seed;
-  let built = buildMain(wanted, pool, usableCombos, request, kit, history, mainTarget, seed);
+  let built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
 
   const previous = history[0] ? [...history[0].mainExerciseIds].sort() : null;
   for (let i = 0; i < 5 && previous && mainIdsOf(built.plan).join() === previous.join(); i++) {
     seed += 1;
-    built = buildMain(wanted, pool, usableCombos, request, kit, history, mainTarget, seed);
+    built = buildMain(wanted, pool, usableCombos, request, kit, history, total, seed, cost);
   }
 
   const steps = buildSteps([warm, built.plan, cool]);
@@ -2284,6 +2346,30 @@ The only module in `src/lib` allowed to touch `window`. Three corrections from t
 review live here: `activeId` is validated against the profiles that exist, prefs
 are validated rather than spread over defaults, and every stored value carries a
 version inside it so a shape change is discarded rather than crashing the runner.
+
+> **CORRECTION, applied during implementation on 2026-08-25.** The code below was
+> wrong in three CRITICAL ways and several smaller ones. Read the shipped
+> `src/lib/storage.ts`, not this block.
+>
+> 1. **`JSON.parse('null')` succeeds and returns `null`,** defeating the `{}` fallback
+>    in `read`. A stored literal `null` made `loadKits` and `loadPrefs` throw — exactly
+>    the bricking this module exists to prevent.
+> 2. **A `null` entry inside the profiles array threw** on `.some((p) => p.id === ...)`.
+> 3. **`loadKits` returned `DEFAULT_KIT_STATE` by reference.** The plan's own round-trip
+>    test permanently poisoned the shared default for the life of the process.
+>
+> The deeper lesson, which cost two further fix rounds: **a read that does not throw is
+> not enough. What it RETURNS must be safe to use.** Corrupt `bells` elements, a
+> `workout` with no `steps` array, a `mainExerciseIds` of `null`, and a `stepIndex` past
+> the end of the workout all survived the read and then crashed one frame later, in
+> `uniqueWeights`, in the runner, and in the generator's spread. The shipped module
+> sanitises what it hands back, and its tests sweep in two stages: the loaders must not
+> throw, and neither must the code that uses what they returned.
+>
+> Also environmental: Node 25 ships a `localStorage` global that shadows jsdom's inside
+> Vitest workers, because vitest's `getWindowKeys` gates on `k in global` and
+> `localStorage` is absent from its hard-coded key list. `tests/setup.ts` delegates to
+> jsdom's real `Storage` rather than hand-rolling one.
 
 - [ ] **Step 1: Write the failing test**
 
