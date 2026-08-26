@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { HistoryScreen } from '@/components/HistoryScreen';
+import { DoneScreen } from '@/components/DoneScreen';
 import { pushHistory } from '@/lib/storage';
-import { entry } from '../fixtures';
-import type { Step, Workout } from '@/lib/types';
+import { generate } from '@/lib/generate';
+import { ALL_EXERCISES } from '@/lib/data/ancillary';
+import { COMBOS } from '@/lib/data/combos';
+import { FULL_KIT, entry, req } from '../fixtures';
+import type { HistoryEntry, Step, WorkStep, Workout } from '@/lib/types';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/history' }));
 
@@ -58,5 +62,85 @@ describe('HistoryScreen', () => {
     pushHistory(entry({ id: 'a' }));
     render(<HistoryScreen />);
     expect(screen.getByText(/no moves were recorded/i)).toBeDefined();
+  });
+});
+
+/**
+ * The two screens that describe a finished session must describe the SAME one.
+ *
+ * They read it from different places - Done lists the moves the runner recorded
+ * as performed, History renders the stored steps - so nothing but a test keeps
+ * them saying the same thing. Before the Main-block filter went in, History
+ * opened on twenty-six lines of warm-up and cool-down against Done's six moves,
+ * and there was no way to tell from the app which was the truth.
+ */
+describe('Done and History describe the same session', () => {
+  const build = () => generate({
+    request: req({ capability: 'intermediate', patterns: ['hinge', 'squat', 'push'] }),
+    kit: FULL_KIT, exercises: ALL_EXERCISES, combos: COMBOS, history: [],
+    now: '2026-08-25T09:00:00.000Z',
+  });
+
+  /** What the runner writes: the distinct Main-block moves actually performed. */
+  const performed = (w: Workout): string[] => [...new Set(
+    w.steps.filter((s): s is WorkStep => s.kind === 'work' && s.block === 'Main').map((s) => s.exerciseId),
+  )];
+
+  const finished = (w: Workout): HistoryEntry =>
+    entry({ id: 'done', workout: w, mainExerciseIds: performed(w), workedSeconds: 2040 });
+
+  /** "Half-Kneeling Press (left)" and the right-hand side are one move. */
+  const withoutSides = (names: string[]): string[] =>
+    [...new Set(names.map((n) => n.replace(/ \((left|right)\)$/, '')))].sort();
+
+  it('lists the same moves on both screens, and only the moves he did', () => {
+    const w = build();
+    pushHistory(finished(w));
+
+    const done = render(<DoneScreen />);
+    const doneMoves = [...done.container.querySelectorAll('li')].map((li) => li.textContent ?? '');
+    done.unmount();
+
+    render(<HistoryScreen />);
+    fireEvent.click(screen.getByText(/25 Aug/));
+    const rowMoves = [...document.querySelectorAll('details li')]
+      .map((li) => li.querySelector('span')?.textContent ?? '');
+
+    expect(rowMoves.length).toBeGreaterThan(0);
+    expect(withoutSides(rowMoves)).toEqual(withoutSides(doneMoves));
+  });
+
+  it('keeps the warm-up and the cool-down out of the expanded row', () => {
+    const w = build();
+    pushHistory(finished(w));
+    render(<HistoryScreen />);
+    fireEvent.click(screen.getByText(/25 Aug/));
+
+    const ancillary = w.steps
+      .filter((s): s is WorkStep => s.kind === 'work' && s.block !== 'Main')
+      .map((s) => s.name);
+    const shown = [...document.querySelectorAll('details li')].map((li) => li.textContent ?? '');
+
+    expect(ancillary.length).toBeGreaterThan(0);
+    for (const name of ancillary) expect(shown.some((line) => line.includes(name))).toBe(false);
+  });
+
+  it('shows only what he got through when the session ended early', () => {
+    const w = build();
+    const all = performed(w);
+    pushHistory(entry({ id: 'part', workout: w, mainExerciseIds: all.slice(0, 1) }));
+    render(<HistoryScreen />);
+    fireEvent.click(screen.getByText(/25 Aug/));
+    const shown = [...document.querySelectorAll('details li')];
+    expect(shown.length).toBeGreaterThan(0);
+    expect(withoutSides(shown.map((li) => li.querySelector('span')?.textContent ?? ''))).toHaveLength(1);
+  });
+
+  it('gives the row a visible way of saying it opens', () => {
+    pushHistory(entry({ id: 'a', workout }));
+    render(<HistoryScreen />);
+    const marker = document.querySelector('summary svg');
+    expect(marker).not.toBeNull();
+    expect(marker?.getAttribute('class')).toContain('group-open:-rotate-180');
   });
 });

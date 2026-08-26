@@ -9,7 +9,12 @@ const KEYS = {
   active: 'kb.active.v1',
 } as const;
 
-const MAX_HISTORY = 30;
+/**
+ * Exported so the shared store can cap its in-memory snapshot to the same
+ * number storage keeps. Without that, an append past the cap leaves the screen
+ * counting one more session than a reload would find.
+ */
+export const MAX_HISTORY = 30;
 const VERSION = 1;
 
 export interface Prefs {

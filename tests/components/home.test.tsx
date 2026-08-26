@@ -41,7 +41,7 @@ describe('HomeScreen', () => {
     pushHistory(entry({ id: 'b', createdAt: new Date().toISOString() }));
     render(<HomeScreen />);
     screen.getByRole('img', { name: /Workouts this week: 2/ });
-    screen.getByRole('img', { name: /Minutes: 50/ });
+    screen.getByRole('img', { name: /Minutes this week: 50/ });
   });
 
   it('ignores workouts older than seven days in the weekly count', () => {

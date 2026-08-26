@@ -191,7 +191,7 @@ export function HomeScreen() {
           <Ring
             value={weekMinutes}
             max={Math.max(weekMinutes, WEEK_MINUTES)}
-            label="Minutes"
+            label="Minutes this week"
             caption="minutes"
           />
         </div>

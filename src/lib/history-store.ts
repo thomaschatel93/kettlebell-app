@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { HISTORY_KEY, loadHistory, saveHistory } from '@/lib/storage';
+import { HISTORY_KEY, MAX_HISTORY, loadHistory, saveHistory } from '@/lib/storage';
 import { createLocalStore } from '@/lib/local-store';
 import type { HistoryEntry } from '@/lib/types';
 
@@ -40,9 +40,15 @@ export const publishHistory = store.publish;
 /** False only during the server render and the hydration render. */
 export const isHistoryHydrated = store.isHydrated;
 
-/** Newest first, which is the order every screen reads it in. */
+/**
+ * Newest first, which is the order every screen reads it in.
+ *
+ * Capped here as well as in `saveHistory`: the write drops the thirty-first
+ * entry, and without the same cut the snapshot every mounted screen is reading
+ * keeps it, so Home counts one more session than a reload would find.
+ */
 export const appendHistory = (e: HistoryEntry): boolean =>
-  publishHistory((previous) => [e, ...previous]);
+  publishHistory((previous) => [e, ...previous].slice(0, MAX_HISTORY));
 
 /**
  * Stamps how a finished session felt onto the entry it belongs to.

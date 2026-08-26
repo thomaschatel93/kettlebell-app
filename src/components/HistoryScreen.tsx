@@ -8,9 +8,29 @@ import { isHistoryHydrated, useHistory } from '@/lib/history-store';
 import { FELT_LABEL, dayText, exerciseNames, formatLabel, minutesText, patternsOf } from '@/lib/session';
 import type { HistoryEntry, WorkStep } from '@/lib/types';
 
-/** One round is the shape of the session; repeating it three times is noise. */
-const firstRound = (entry: HistoryEntry): WorkStep[] =>
-  (entry.workout?.steps ?? []).filter((s): s is WorkStep => s.kind === 'work' && s.round === 1);
+/**
+ * The moves of the session, once.
+ *
+ * Three filters, each earning its place. One round, because repeating the same
+ * five moves three times is noise rather than record. The Main block, because
+ * an expanded row that opens on four minutes of arm circles and a couch stretch
+ * buries the twelve lines that are the actual workout. And only the moves he
+ * got through - `mainExerciseIds` is what the runner recorded as performed - so
+ * a session ended early shows what happened rather than what was planned.
+ *
+ * That last filter is also what makes this screen agree with Done: both are
+ * then reading the same list of performed moves, so the two cannot describe one
+ * session two different ways. An entry with no recorded moves (an older or
+ * repaired record) falls back to the planned main block, which is the best
+ * account of it that survives.
+ */
+const firstRound = (entry: HistoryEntry): WorkStep[] => {
+  const main = (entry.workout?.steps ?? []).filter(
+    (s): s is WorkStep => s.kind === 'work' && s.block === 'Main' && s.round === 1,
+  );
+  if (entry.mainExerciseIds.length === 0) return main;
+  return main.filter((s) => entry.mainExerciseIds.includes(s.exerciseId));
+};
 
 const prescription = (s: WorkStep): string =>
   s.reps !== undefined ? `${s.reps} reps` : s.seconds !== undefined ? `${s.seconds} sec` : '';
@@ -43,8 +63,30 @@ function Row({ entry }: { entry: HistoryEntry }) {
         >
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-base font-bold tracking-tight">{dayText(entry.createdAt)}</span>
-            <span className="text-sm text-[var(--text-dim)]">
+            <span className="flex items-baseline gap-2 text-sm text-[var(--text-dim)]">
               {`${formatLabel(entry)} · ${minutesText(entry.workedSeconds)}`}
+              {/*
+                The one thing that says a row opens. The native marker is hidden
+                because it cannot be styled to the design system, so hiding it
+                without replacing it left the row looking like a flat card. The
+                turn is CSS on the parent's open state - no JavaScript, no second
+                source of truth about whether the row is open - and the global
+                prefers-reduced-motion rule cuts the transition to nothing.
+              */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0 translate-y-0.5 transition-transform duration-200 group-open:-rotate-180"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
             </span>
           </div>
 
