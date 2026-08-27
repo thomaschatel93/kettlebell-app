@@ -66,13 +66,23 @@ const GRID_01: Sheet = {
   columns: 4,
   rows: 4,
   ids: [
+    // Cell 1 was Two-Hand Swing, superseded: `two-hand-swing.webp` now ships from
+    // `media-source/two-hand-swing-hinge-to-standing.png`, a proper 2-panel still
+    // (hinge, then standing tall with the bell floated to chest height) instead
+    // of this single frozen grid pose. Left null so this sheet can never
+    // overwrite it back to the single-position version. See docs/media-map.md.
+    //
     // Cell 4 is labelled Clean and Press, and it is not shippable: the figure
     // holds TWO bells, one pressed overhead and one in an ambiguous rack with
     // the elbow away from the ribs. `clean-and-press` is a one-bell, single-arm
     // lift whose cues say to spear one hand through the handle, so the picture
     // contradicts its own caption and the kit the app filtered for.
-    'two-hand-swing', 'goblet-squat', 'deadlift', null,
-    'front-lunge', 'sumo-deadlift', 'single-arm-swing', 'overhead-press',
+    null, 'goblet-squat', 'deadlift', null,
+    // Cell 7 was Single-Arm Swing, superseded the same way as cell 1: it now
+    // ships from `media-source/single-arm-swing-hinge-to-standing.png`, a
+    // 2-panel still (hinge, then standing tall with the bell forward at chest
+    // height, one hand). See docs/media-map.md.
+    'front-lunge', 'sumo-deadlift', null, 'overhead-press',
     // Cell 12 is Front Raise, dropped: not real kettlebell programming.
     'russian-twist', 'step-up', 'bent-over-row', null,
     'snatch', 'halo', 'reverse-lunge', 'squat-to-press',

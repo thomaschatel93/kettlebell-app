@@ -1,10 +1,14 @@
-# Media map — 20 new PNGs in `media-source/`
+# Media map — 22 new PNGs in `media-source/`
 
-Method: each of the 20 files was opened and visually inspected (plus zoomed crops
-of hands/grips/faces for the ambiguous ones), then matched against the exercise
-ids in `src/lib/data/exercises.ts` using the "Form to specify" notes in
+Method: each of the first 20 files was opened and visually inspected (plus zoomed
+crops of hands/grips/faces for the ambiguous ones), then matched against the
+exercise ids in `src/lib/data/exercises.ts` using the "Form to specify" notes in
 `docs/image-brief.md` Batch 2, and the Batch 1 note that Clean and Press and
 Snatch needed regenerating as 2-panel images.
+
+Two more files arrived later, generated directly against the Batch A prompts in
+`docs/images-to-regenerate.md` for Two-Hand Swing and Single-Arm Swing, and are
+mapped the same way below.
 
 | Filename | Exercise id | Confidence | Visual evidence | Form assessment |
 |---|---|---|---|---|
@@ -28,6 +32,8 @@ Snatch needed regenerating as 2-panel images.
 | `a-single-athletic-male-figure--short-brown-hair--b (17).png` | Unidentified | Unsure | Standing, arms crossed and reaching forward at chest height, no kettlebell. | No bell. Looks like an arm/shoulder mobility stretch (Batch 3 territory — closest named item would be "arm circles" or a chest-adjacent stretch, but the pose doesn't cleanly match either). |
 | `a-single-athletic-male-figure--short-brown-hair--b (18).png` | Unidentified | Unsure | Bodyweight squat, arms reaching forward for counterbalance, no kettlebell. | No bell. Looks like "bodyweight squat" (Batch 3). |
 | `two-positions-of-the-same-character-shown-side-by-.png` | `turkish-get-up` | High | Two-panel image, left-to-right with an arrow between: left panel is lying on the side/back propped on the forearm with the bell pressed overhead; right panel is the tall-kneeling position, bell still locked overhead, free hand on the front knee. Matches the brief's 2-panel form note exactly. | Zoomed the left panel's pressing arm: single-hand grip, wrist straight, arm vertical over the shoulder throughout. Ship as-is. |
+| `two-hand-swing-hinge-to-standing.png` | `two-hand-swing` | High | Renamed from `ChatGPT Image Aug 27, 2026, 11_56_44 AM.png`. Two-panel image with an arrow between: left panel is the hinge, bell hanging between the legs held in both hands; right panel is standing tall, bell floated up to chest height, still both hands, arms straight. Matches the Batch A 2-panel form note in `docs/images-to-regenerate.md` exactly. | Zoomed both grips: both hands are on the cylindrical handle, not the ball, in both panels. Back is flat in the hinge. Wrist stays straight in line with the forearm throughout. Ship as-is. |
+| `single-arm-swing-hinge-to-standing.png` | `single-arm-swing` | High | Renamed from `ChatGPT Image Aug 27, 2026, 11_58_19 AM.png`. Two-panel image with an arrow between: left panel is the hinge, bell hanging between the legs held in one hand, free hand loose; right panel is standing tall, bell forward at chest height in one hand, free arm hanging clear. Matches the Batch A 2-panel form note in `docs/images-to-regenerate.md` exactly. | Zoomed both grips: the working hand is on the handle, not the ball, in both panels. Back is flat in the hinge. Wrist stays straight in line with the forearm throughout. Ship as-is. |
 
 ## Unidentified
 
@@ -65,7 +71,9 @@ reason written beside the id.
 
 | Sheet, cell | Intended exercise | Why it does not ship |
 |---|---|---|
+| grid-01, cell 1 | `two-hand-swing` | Not a fault — superseded. This single frozen pose is replaced by a proper 2-panel still, `two-hand-swing-hinge-to-standing.png`: the hinge, then standing tall with the bell floated to chest height. Left `null` so this sheet can never overwrite the better version back in. |
 | grid-01, cell 4 | `clean-and-press` | The figure holds **two** bells, one pressed overhead and one racked with the elbow away from the ribs. The lift is one bell, single-arm, and its cues say to spear one hand through the handle. |
+| grid-01, cell 7 | `single-arm-swing` | Not a fault — superseded the same way as cell 1, by the 2-panel `single-arm-swing-hinge-to-standing.png`: the hinge, then standing tall with the bell forward at chest height, one hand. |
 | grid-01, cell 12 | Front Raise | Dropped from the app: not real kettlebell programming. |
 | grid-02, cell 2 | `clean`, front view | Not a fault, just second best. Only one file can be `clean.webp`, and the side view in cell 1 shows what the cue asks for: forearm vertical against the ribs, elbow tucked, wrist straight. |
 | grid-02, cell 4 | `high-pull` | Drawn with **both** hands on the handle and both elbows flared wide. The lift is one bell, unilateral, and its cues say one hand on the handle with the free arm out of the way. |

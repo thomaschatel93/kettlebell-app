@@ -73,17 +73,16 @@ own caption is worse than no picture.
 Generated from the app's own cue text, so the pictures cannot contradict the coaching.
 
 
-## Batch A — need more than one position (10)
+## Batch A — need more than one position (8)
 
 These teach a movement, not a pose. A single frozen frame of a swing at chest height is
 indistinguishable from a front raise, which is the error the picture exists to prevent.
 
-
-**Two-Hand Swing** (`two-hand-swing`)  [2 panels]
-Bell a forearm’s length in front of your toes. Shoulders back, spine long. Hike the bell back past your knees. Snap the hips through and stand tall.
-
-**Single-Arm Swing** (`single-arm-swing`)  [2 panels]
-Bell a forearm’s length in front of your toes. Grip with one hand, free arm loose at your side. Hike the bell back past your knees. Snap the hips through and stand tall.
+Two-Hand Swing and Single-Arm Swing are done: both now ship as 2-panel stills
+(`two-hand-swing.webp`, `single-arm-swing.webp`), imported from
+`media-source/two-hand-swing-hinge-to-standing.png` and
+`media-source/single-arm-swing-hinge-to-standing.png`. See `docs/media-map.md` for
+the form assessment.
 
 **Snatch** (`snatch`)  [2 panels]
 Bell a forearm’s length in front of you, one hand on the handle. Hinge back, chest proud, free arm out of the way. Hike the bell back, then snap the hips hard. Pull the elbow high and close, then punch your hand through the handle.

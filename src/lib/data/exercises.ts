@@ -50,7 +50,7 @@ export const EXERCISES: Exercise[] = [
     warmupSuitable: false,
     cooldownSuitable: false,
     image: '/exercises/two-hand-swing.webp',
-    imagePanels: 1,
+    imagePanels: 2,
     cues: {
       setup: ['Bell a forearm’s length in front of your toes.', 'Shoulders back, spine long.'],
       execution: ['Hike the bell back past your knees.', 'Snap the hips through and stand tall.', 'Let the bell float, do not lift it.'],
@@ -182,7 +182,7 @@ export const EXERCISES: Exercise[] = [
     warmupSuitable: false,
     cooldownSuitable: false,
     image: '/exercises/single-arm-swing.webp',
-    imagePanels: 1,
+    imagePanels: 2,
     cues: {
       setup: ['Bell a forearm’s length in front of your toes.', 'Grip with one hand, free arm loose at your side.'],
       execution: ['Hike the bell back past your knees.', 'Snap the hips through and stand tall.', 'Resist the twist so both hips stay facing forward.'],

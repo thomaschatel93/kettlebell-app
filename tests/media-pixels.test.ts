@@ -75,6 +75,8 @@ const STILLS = new Map<string, string>([
   ['windmill', 'a-single-athletic-male-figure--short-brown-hair--b (8).png'],
   ['renegade-row', 'a-single-athletic-male-figure--short-brown-hair--b (9).png'],
   ['turkish-get-up', 'two-positions-of-the-same-character-shown-side-by-.png'],
+  ['two-hand-swing', 'two-hand-swing-hinge-to-standing.png'],
+  ['single-arm-swing', 'single-arm-swing-hinge-to-standing.png'],
 ]);
 
 beforeAll(async () => {
