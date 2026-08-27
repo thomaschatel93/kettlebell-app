@@ -343,20 +343,48 @@ Preview, Workout, Rest and Done are the five stages of the Workout tab.
    over he is, so returning to the phone tells him something.
 6. **Done.** Worked time against the estimate, exercises completed, patterns
    trained, and a one-tap **Easy / Right / Brutal** rating.
-7. **History.** Reverse-chronological, expanding into what was done.
+7. **History.** Reverse-chronological, expanding into what was done. **Sessions
+   can be deleted**, which is the single exception to the rule below that
+   nothing may delete a session that happened: the runner may not, he may. It
+   costs three taps - Select, tick, then a confirmation that says how many are
+   going and that there is no undo - and the tick sits outside the disclosure so
+   it cannot also open the row.
 8. **Kit.** Two profiles, their bells as a row of weight chips rather than a
    keyboard, a bench toggle, and the capability setting.
 
 ### 5.1 Warm-up and cool-down presentation
 
-**One scrollable checklist card per block, not one hero card per move.** Hip
-circles and leg swings do not each need a full screen, an image and a Next button.
-One-exercise-per-screen is reserved for the main block, where it earns its place.
+**One full card per move, the same as the main block.** *Revised 2026-08-27,
+after real use. This reverses the original decision, which is recorded below
+along with why it did not survive contact.*
 
-This is also why the fourteen bodyweight ancillary stills were cut. Without it, every
-session would open with three to seven minutes of empty placeholders, and first
-impressions of the app would be formed entirely from the part that was
-deprioritised.
+The original rule was one scrollable checklist card per block: hip circles and
+leg swings do not each need a full screen, and with no stills for any of the
+fourteen ancillary moves, a card per move meant every session opening with a run
+of empty placeholders.
+
+Two things make the reverse the better answer now.
+
+**The checklist was the one block the app would not hold his place in.** That is
+the app's whole promise - it walks the list so he does not have to hold side,
+count and position in his head while breathing hard - and the block where he is
+coldest and least willing to think was the block it was withheld from.
+
+**The empty-placeholder objection was answered by §5.4 and not applied here.**
+The main card already degrades properly with no picture: the media slot
+collapses, the execution cues come up to heading size, and the words become the
+content. A warm-up card is that card. It is not a hole in the screen, and it
+improves by itself the day a still lands. The original objection was also about
+first impressions of a product being judged; this is one person's own app, used
+daily, and his own use is the better evidence.
+
+**What is NOT shown: the transition seconds.** The plan carries fifteen seconds
+between one ancillary move and the next, and ten in the cool-down. Those are not
+rests, they are the time the budget allows for walking to the mat. They keep
+their place in the estimate and get no screen: a countdown he has to stand
+through seven times is the opposite of a warm-up, and it would sound forty-eight
+extra cues in the first three minutes of every session. A rest gets a screen only
+in the Main block, where it is a real rest.
 
 ### 5.2 Controls on the workout screen
 
@@ -367,6 +395,11 @@ deprioritised.
   session over a shoulder that is not having it today.
 - **Pause**, in the bottom row beside Next. The phone is on the floor; the top
   edge is the furthest reach and the worst target from a crouch.
+- **The worked clock, directly above Pause.** `workedSeconds` ran from the first
+  build and was shown nowhere, which left Pause looking like a control that did
+  nothing: on a work step there was no moving number for it to stop. It reads
+  "Worked m:ss", and while paused it reads "Paused" beside a frozen number, in
+  the accent.
 - **Exit**, in the header, split in two: **Leave for now**, which keeps the
   session so Home can resume it, and **End here**, which writes a partial history
   record before clearing. Nothing in this app may delete a session that happened.
@@ -376,6 +409,20 @@ deprioritised.
 Three cues on a preloaded HTML `<audio>` element, unlocked by the Start tap: a
 tick at three, two and one, a single tone at zero, and nothing else.
 
+**The cues are generated, not sourced**, by `scripts/make-cues.mts` (`npm run
+audio`), and the file states the reasoning. The first pair failed three ways at
+once in a real garage: they peaked at -18.5 dBFS with the player multiplying by
+a further 0.8; the tick sat at 880 Hz, in the middle of where music keeps its
+energy; and a sine faded in over tens of milliseconds is a swell, which is what
+the ear discards first in noise. The tick is now a 110 ms click at 2.1 kHz with
+its octave and a filtered noise transient on the attack, and the tone at zero is
+a 550 ms chime at 1.32 kHz. Both are normalised to a measured -1 dBFS peak, and
+the element plays at full scale: about 19 dB louder at the peak than before.
+
+**The two must stay distinguishable**, because the tone means something the
+ticks do not. They are separated on both axes a listener actually uses - pitch,
+and, more usefully in noise, duration: 110 ms against 550 ms.
+
 A media element is used rather than Web Audio because iOS silences Web Audio with
 the hardware ringer switch, whereas user-initiated media plays on the media
 channel and mixes over music. Vibration is not an option: `navigator.vibrate` does
@@ -384,10 +431,27 @@ not exist on iOS Safari.
 Everything else in this design assumes the phone is a metre away. Sound is the
 only output channel that reaches that far while he is mid-plank.
 
-### 5.4 Exercise card with no image
+### 5.4 The exercise card
 
-The media slot **collapses**. No dashed placeholder, no reserved space. Setup and
-execution move up to heading size and the "watch out for" line is always visible.
+**It does not scroll.** The card is a flex column that fills the runner's region
+exactly and the picture is the one element allowed to give, so the side, the
+name, the bell, the count and the still are on screen together at any phone size
+without anyone guessing a `vh`. Everything that used to push the picture into a
+scroll was moved or folded:
+
+- The header runs the block, the round and the move together on ONE line.
+- The side, the bell and the count share ONE row. The side pill did not shrink -
+  see §6 - it moved beside the other two and dropped the word "side".
+- "How to do it" and "Watch out for" are disclosures. The warning used to stand
+  open at the foot of every card, which is a third of a phone spent on a line he
+  has read forty times.
+
+#### With no image
+
+The media slot **collapses**. No dashed placeholder, no reserved space. The
+execution cues move up to heading size, and the setup lines fold away behind
+their own name rather than under "How to do it", which would be a lie about
+where the how-to actually is.
 For an exercise with no picture the words are the entire content, and they should
 not sit under a large empty rectangle. The layout differing between illustrated
 and unillustrated exercises is fine; this is one app for one person, not a design
@@ -420,6 +484,14 @@ Accessibility floor: text contrast at WCAG AA, tap targets at least 44px, motion
 reduced when the system asks. The countdown must read at arm's length, so it is
 set large.
 
+**The side pill is sized in arcminutes, not in pixels.** At 18px its cap height
+subtended about 7 arcmin at a metre on a 375pt phone: you could see that a side
+had been named and not which one, and that misreading costs a whole set on the
+wrong arm. At 30px it is about 12 arcmin. When the card was rebuilt to stop it
+scrolling every other piece of type on it came down and this one did not; it paid
+for its space by moving onto the row with the bell and the reps and by dropping
+the word "side".
+
 **The dim text token is banned from the workout and rest screens.** Grey on near
 black passes AA at a desk and is mush at a metre through sweat on the glass.
 
@@ -432,7 +504,8 @@ square inside a dark card is the most visible defect the media pipeline can ship
 change can be detected and discarded rather than crashing the runner.
 
 - `kb.kits.v1` — the two profiles, which is active, and the capability setting
-- `kb.history.v1` — last 30 workouts, each holding a whole `Workout`
+- `kb.history.v1` — last 30 workouts, each holding a whole `Workout`; entries
+  can be removed from the History screen, and only from there
 - `kb.prefs.v1` — last used patterns, effort and time, as the next default
 - `kb.active.v1` — the workout in progress
 

@@ -1,10 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { buttonClass } from '@/components/Button';
+import { Button, buttonClass } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { PatternTag } from '@/components/Chip';
-import { isHistoryHydrated, useHistory } from '@/lib/history-store';
+import { isHistoryHydrated, removeEntries, useHistory } from '@/lib/history-store';
 import { FELT_LABEL, dayText, exerciseNames, formatLabel, minutesText, patternsOf, roundsText } from '@/lib/session';
 import type { HistoryEntry, WorkStep } from '@/lib/types';
 
@@ -53,21 +54,48 @@ const prescription = (s: WorkStep): string =>
 const newestFirst = (history: HistoryEntry[]): HistoryEntry[] =>
   [...history].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-function Row({ entry }: { entry: HistoryEntry }) {
+function Row({
+  entry,
+  selecting,
+  selected,
+  onToggle,
+}: {
+  entry: HistoryEntry;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const patterns = patternsOf(entry);
   const steps = firstRound(entry);
   const moves = exerciseNames(entry);
   const rounds = mainRounds(entry);
 
   return (
-    <Card className="p-0">
+    <Card className="flex items-start gap-0 p-0">
+      {/*
+        The tick sits OUTSIDE the disclosure, not inside its summary. A control
+        inside a <summary> is a control that also opens the row, and a tick that
+        expands a session while marking it for deletion is exactly the wrong
+        feedback for the one action in this app that cannot be undone.
+      */}
+      {selecting && (
+        <label className="tap-target flex shrink-0 cursor-pointer items-center justify-center self-stretch pl-4">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            aria-label={`Select the workout from ${dayText(entry.createdAt)}`}
+            className="h-7 w-7 accent-[var(--accent)]"
+          />
+        </label>
+      )}
       {/*
         A native disclosure, not a button and a piece of state. It is open and
         closed correctly for a screen reader for free, it survives with
         JavaScript still loading, and it needs no animation to explain itself -
         which is the honest answer under prefers-reduced-motion anyway.
       */}
-      <details className="group">
+      <details className="group min-w-0 flex-1">
         <summary
           className="tap-target flex cursor-pointer list-none flex-col gap-2 p-5
             [&::-webkit-details-marker]:hidden"
@@ -157,6 +185,22 @@ function Row({ entry }: { entry: HistoryEntry }) {
 }
 
 /**
+ * Choosing rows, then throwing them away, as three states rather than two.
+ *
+ * `view` is the screen as it has always been. `select` puts a tick beside every
+ * row and a count in the bar. `confirm` is the one that matters: it replaces
+ * the bar with a plain sentence saying how many sessions are about to go and
+ * that they are not coming back, and it puts the destructive control BESIDE a
+ * way out rather than under a thumb that was already moving.
+ *
+ * Two taps and a state change, rather than one tap and a native `confirm()`.
+ * The runner is built around the rule that nothing may delete a session that
+ * happened; this is the single deliberate exception, so it is made to feel like
+ * one instead of like an ordinary tap that happens to be final.
+ */
+type Mode = 'view' | 'select' | 'confirm';
+
+/**
  * Everything he has done, newest first, each row opening into what was in it.
  *
  * Thirty sessions is the whole store, so there is no paging and no search: a
@@ -165,6 +209,25 @@ function Row({ entry }: { entry: HistoryEntry }) {
  */
 export function HistoryScreen() {
   const history = useHistory();
+  const [mode, setMode] = useState<Mode>('view');
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+
+  const leave = (): void => {
+    setMode('view');
+    setPicked(new Set());
+  };
+
+  const toggle = (id: string): void =>
+    setPicked((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  const remove = (): void => {
+    removeEntries(picked);
+    leave();
+  };
 
   if (!isHistoryHydrated(history)) {
     return <p className="text-sm text-[var(--text-dim)]">Reading your history…</p>;
@@ -184,10 +247,49 @@ export function HistoryScreen() {
     );
   }
 
+  const count = picked.size;
+  const sessions = `${count} ${count === 1 ? 'workout' : 'workouts'}`;
+
   return (
     <div className="flex flex-col gap-3">
+      {mode === 'confirm' ? (
+        <Card className="flex flex-col gap-3">
+          <p className="text-base font-bold">{`Delete ${sessions}?`}</p>
+          <p className="text-sm text-[var(--text-dim)]">
+            They are gone for good - there is no undo and no copy anywhere else.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={() => setMode('select')}>
+              Keep them
+            </Button>
+            <Button variant="danger" onClick={remove}>
+              {`Delete ${sessions}`}
+            </Button>
+          </div>
+        </Card>
+      ) : mode === 'select' ? (
+        <div className="flex gap-3">
+          <Button variant="ghost" onClick={leave}>
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={count === 0} onClick={() => setMode('confirm')}>
+            {count === 0 ? 'Delete' : `Delete ${sessions}`}
+          </Button>
+        </div>
+      ) : (
+        <Button variant="ghost" fullWidth={false} className="self-start" onClick={() => setMode('select')}>
+          Select
+        </Button>
+      )}
+
       {newestFirst(history).map((entry) => (
-        <Row key={entry.id} entry={entry} />
+        <Row
+          key={entry.id}
+          entry={entry}
+          selecting={mode !== 'view'}
+          selected={picked.has(entry.id)}
+          onToggle={() => toggle(entry.id)}
+        />
       ))}
     </div>
   );

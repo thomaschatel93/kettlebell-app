@@ -59,5 +59,21 @@ export const appendHistory = (e: HistoryEntry): boolean =>
 export const rateEntry = (id: string, felt: HistoryEntry['felt']): boolean =>
   publishHistory((previous) => previous.map((e) => (e.id === id ? { ...e, felt } : e)));
 
+/**
+ * Throws sessions away, permanently.
+ *
+ * The runner may not delete a session that happened - that rule is what makes
+ * "End here" safe to tap mid-workout - but this is the other side of it: it is
+ * his record, and a record he cannot prune is a record he stops trusting. The
+ * deliberation lives in the screen, which asks twice before it calls this; by
+ * the time it is called the decision has been made and there is nothing left
+ * here to soften.
+ *
+ * Takes a set rather than one id, so removing four rows is one write and one
+ * notification instead of four of each.
+ */
+export const removeEntries = (ids: ReadonlySet<string>): boolean =>
+  publishHistory((previous) => previous.filter((e) => !ids.has(e.id)));
+
 export const useHistory = (): HistoryEntry[] | undefined =>
   useSyncExternalStore(subscribeHistory, getHistorySnapshot, getHistoryServerSnapshot);

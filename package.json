@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "audio": "tsx scripts/make-cues.mts",
     "media:slice": "tsx scripts/slice-grid.mts",
     "media:import": "tsx scripts/import-stills.mts",
     "media:todo": "tsx scripts/check-media.mts",

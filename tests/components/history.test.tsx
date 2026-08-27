@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { HistoryScreen } from '@/components/HistoryScreen';
 import { DoneScreen } from '@/components/DoneScreen';
 import { WorkoutPreview } from '@/components/WorkoutPreview';
-import { pushHistory, saveActive } from '@/lib/storage';
+import { loadHistory, pushHistory, saveActive } from '@/lib/storage';
 import { generate } from '@/lib/generate';
 import { ALL_EXERCISES } from '@/lib/data/ancillary';
 import { COMBOS } from '@/lib/data/combos';
@@ -57,6 +57,109 @@ describe('HistoryScreen', () => {
     fireEvent.click(screen.getByText(/25 Aug/));
     screen.getByText('Two-hand Swing');
     expect(screen.getByText(/15 reps/).textContent).toMatch(/24 kg/);
+  });
+
+  /**
+   * His record, his call - but it is the one irreversible act in the app, and
+   * the runner is built the other way round: nothing there may delete a session
+   * that happened. So it costs three taps, not one, and none of them is a tap
+   * he could make by accident on the way to opening a row.
+   */
+  describe('deleting sessions', () => {
+    const two = (): void => {
+      pushHistory(entry({ id: 'old', createdAt: '2026-08-01T09:00:00.000Z', workout }));
+      pushHistory(entry({ id: 'new', createdAt: '2026-08-25T09:00:00.000Z', workout }));
+    };
+
+    it('offers no ticks and no delete until he asks to select', () => {
+      two();
+      render(<HistoryScreen />);
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
+      screen.getByRole('button', { name: 'Select' });
+    });
+
+    it('will not arm the delete until something is actually picked', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    });
+
+    /**
+     * The tick must not also open the row. A control inside a <summary> does
+     * both, which is why it sits outside one.
+     */
+    it('ticks a row without expanding it', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      expect(document.querySelectorAll('details[open]')).toHaveLength(0);
+    });
+
+    it('asks once more, saying how many and that there is no undo', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+
+      screen.getByText('Delete 1 workout?');
+      screen.getByText(/no undo/i);
+      screen.getByRole('button', { name: 'Keep them' });
+    });
+
+    it('backs out of the confirmation with everything still ticked', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Keep them' }));
+
+      expect(loadHistory()).toHaveLength(2);
+      expect(screen.getAllByRole('checkbox')[0]).toBeChecked();
+    });
+
+    it('removes only what was picked, and writes that through to storage', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      // Newest first, so the first tick is the 25 August session.
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+
+      expect(loadHistory().map((e) => e.id)).toEqual(['old']);
+      expect(screen.queryByText(/25 Aug/)).toBeNull();
+      screen.getByText(/1 Aug/);
+    });
+
+    it('drops back out of selection once the deletion has happened', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 1 workout' }));
+
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      screen.getByRole('button', { name: 'Select' });
+    });
+
+    it('counts more than one in words that match the number', () => {
+      two();
+      render(<HistoryScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      for (const box of screen.getAllByRole('checkbox')) fireEvent.click(box);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 2 workouts' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete 2 workouts' }));
+
+      expect(loadHistory()).toHaveLength(0);
+      screen.getByText(/no workouts yet/i);
+    });
   });
 
   it('says nothing was recorded rather than showing an empty panel', () => {
