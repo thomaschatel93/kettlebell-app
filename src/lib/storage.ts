@@ -9,7 +9,12 @@ const KEYS = {
   active: 'kb.active.v1',
 } as const;
 
-const MAX_HISTORY = 30;
+/**
+ * Exported so the shared store can cap its in-memory snapshot to the same
+ * number storage keeps. Without that, an append past the cap leaves the screen
+ * counting one more session than a reload would find.
+ */
+export const MAX_HISTORY = 30;
 const VERSION = 1;
 
 export interface Prefs {
@@ -69,7 +74,13 @@ function write(key: string, value: unknown): boolean {
   }
 }
 
-const DEFAULT_PREFS: Prefs = { patterns: ['hinge', 'squat', 'push'], effort: 'normal', totalMinutes: 30 };
+/**
+ * What a first-time user gets, and what a stored value falls back to field by
+ * field. Exported so `prefs-store.ts` can use a clone of it as the placeholder
+ * the server render and the hydration render both see: the Setup screen renders
+ * real controls before storage has been read, and they have to show something.
+ */
+export const DEFAULT_PREFS: Prefs = { patterns: ['hinge', 'squat', 'push'], effort: 'normal', totalMinutes: 30 };
 
 function isValidBell(x: unknown): x is { weightKg: number; count: number } {
   return isPlainObject(x)
@@ -156,6 +167,16 @@ export const saveKits = (state: KitState): boolean => write(KEYS.kits, { ...stat
 export const KITS_KEY: string = KEYS.kits;
 
 /**
+ * The prefs and active-workout keys, exported for the same reason as KITS_KEY:
+ * `prefs-store.ts` and `active-store.ts` each listen for a `storage` event and
+ * have to tell their own key from anyone else's. Exported as values rather than
+ * retyped there, so the two cannot drift apart.
+ */
+export const PREFS_KEY: string = KEYS.prefs;
+export const ACTIVE_KEY: string = KEYS.active;
+export const HISTORY_KEY: string = KEYS.history;
+
+/**
  * The minimum an entry needs to be worth keeping at all. `id` identifies it;
  * `createdAt` is what the history screen sorts and displays by, so an entry
  * without a usable one of those is better dropped than shown out of order or
@@ -192,8 +213,17 @@ export function loadHistory(): HistoryEntry[] {
   if (!isPlainObject(raw) || raw.v !== VERSION || !Array.isArray(raw.entries)) return [];
   return raw.entries.filter(hasKeepableHistoryShape).map(sanitizeHistoryEntry);
 }
-export const pushHistory = (e: HistoryEntry): boolean =>
-  write(KEYS.history, { v: VERSION, entries: [e, ...loadHistory()].slice(0, MAX_HISTORY) });
+
+/**
+ * The whole list, capped. The cap lives here rather than at each call site, so
+ * "history is the last thirty sessions" is stated once however an entry gets
+ * added - appended by the runner, or rewritten by the Done screen stamping a
+ * `felt` rating onto the newest one.
+ */
+export const saveHistory = (entries: HistoryEntry[]): boolean =>
+  write(KEYS.history, { v: VERSION, entries: entries.slice(0, MAX_HISTORY) });
+
+export const pushHistory = (e: HistoryEntry): boolean => saveHistory([e, ...loadHistory()]);
 
 export function loadPrefs(): Prefs {
   const raw = readRaw(KEYS.prefs);

@@ -38,6 +38,27 @@ const DISABLED =
   'disabled:border disabled:border-[var(--border)] disabled:cursor-not-allowed';
 
 /**
+ * The look, on its own, so a real link can wear it.
+ *
+ * Home's "Start a workout" and "Resume workout" are navigation, not actions:
+ * they want to be anchors, so they prefetch, open in a new tab and read as
+ * links to a screen reader. Restyling an anchor to match by hand would fork the
+ * one control the app is driven by - and the fork would quietly drop the 44px
+ * floor or the large-text size that keeps white on --accent legal. Handing out
+ * the class string keeps one definition of both.
+ */
+export function buttonClass(
+  variant: Variant = 'primary',
+  fullWidth = true,
+  className = '',
+): string {
+  return `tap-target inline-flex items-center justify-center gap-2
+    rounded-[var(--radius)] px-6 py-4 ${ACCENT_SAFE_TYPE} leading-none tracking-tight
+    transition-opacity active:opacity-80 ${DISABLED}
+    ${fullWidth ? 'w-full' : ''} ${STYLES[variant]} ${className}`;
+}
+
+/**
  * The one control the app is driven by, usually the only thing on screen the
  * user can reach mid-set.
  */
@@ -48,14 +69,5 @@ export function Button({
   type = 'button',
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; fullWidth?: boolean }) {
-  return (
-    <button
-      {...rest}
-      type={type}
-      className={`tap-target inline-flex items-center justify-center gap-2
-        rounded-[var(--radius)] px-6 py-4 ${ACCENT_SAFE_TYPE} leading-none tracking-tight
-        transition-opacity active:opacity-80 ${DISABLED}
-        ${fullWidth ? 'w-full' : ''} ${STYLES[variant]} ${className}`}
-    />
-  );
+  return <button {...rest} type={type} className={buttonClass(variant, fullWidth, className)} />;
 }

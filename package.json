@@ -10,6 +10,7 @@
     "media:slice": "tsx scripts/slice-grid.mts",
     "media:import": "tsx scripts/import-stills.mts",
     "media:todo": "tsx scripts/check-media.mts",
+    "icons": "tsx scripts/make-icons.mts",
     "test": "vitest run",
     "test:watch": "vitest",
     "pretypecheck": "next typegen",
