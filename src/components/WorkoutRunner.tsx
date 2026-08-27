@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AncillaryChecklist } from '@/components/AncillaryChecklist';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { ExerciseCard } from '@/components/ExerciseCard';
 import { ProgressBar } from '@/components/ProgressBar';
 import { RestCard } from '@/components/RestCard';
 import { isActiveHydrated, publishActive, useActiveWorkout } from '@/lib/active-store';
-import { nowMs, tick as readClock } from '@/lib/clock';
+import { mmss, nowMs, tick as readClock } from '@/lib/clock';
 import { ALL_EXERCISES } from '@/lib/data/ancillary';
 import { type ActiveState } from '@/lib/storage';
 import { appendHistory } from '@/lib/history-store';
@@ -22,10 +21,10 @@ import { useWakeLock } from '@/lib/useWakeLock';
  * The screen the whole app exists for.
  *
  * It holds NO programming logic. The workout arrives as a flat `Step[]` and
- * this walks it; every decision about what comes next was made by the engine
- * before he ever tapped start.
+ * this walks it, one step to a screen; every decision about what comes next was
+ * made by the engine before he ever tapped start.
  *
- * Three things here are not style choices:
+ * Four things here are not style choices:
  *
  * 1. THE CLOCK, NEVER A COUNTER. `restEndsAt` is an absolute epoch millisecond
  *    value and the remaining time is derived from the clock on every tick and
@@ -41,7 +40,12 @@ import { useWakeLock } from '@/lib/useWakeLock';
  *    itself, the reading keeps going upward and says how far over he is. The
  *    number he wants at that moment is how long he has actually been resting.
  *
- * 3. NO WAY TO LOSE A SESSION. Previous is always live and never asks twice,
+ * 3. THAT WORKED CLOCK IS ON SCREEN. It ran from the first build and was shown
+ *    nowhere, which left Pause looking like a control that did nothing: on a
+ *    work step there was no moving number for it to stop. It now sits directly
+ *    above Pause, so the button and the thing it acts on are the same glance.
+ *
+ * 4. NO WAY TO LOSE A SESSION. Previous is always live and never asks twice,
  *    because wet hands produce phantom taps and there has to be a way back.
  *    Exit splits in two: leaving keeps the session for Home to resume, ending
  *    writes a partial record first. Nothing here deletes a session that
@@ -57,30 +61,25 @@ const ADD_MS = 30_000;
 const BY_ID: ReadonlyMap<string, Exercise> = new Map(ALL_EXERCISES.map((e) => [e.id, e]));
 
 /**
- * Warm-up and cool-down are lists, not hero cards.
+ * The steps that get a screen, which is not quite all of them.
  *
- * The warm-up runs first in every session, so a card per move meant every
- * session opened with a run of near-empty placeholders being tapped through.
- * One block, one card, worked down at his own pace.
+ * Warm-up and cool-down are full cards now, one move to a screen, the same as
+ * the main block - but the plan also carries fifteen seconds between one
+ * ancillary move and the next, and those are not rests. They are the seconds
+ * the budget allows for walking to the mat. Standing in front of a countdown
+ * seven times during a warm-up is the opposite of warming up, and it would
+ * sound forty-eight extra cues in the first three minutes of every session.
+ *
+ * So a rest gets a screen only in the Main block, where it is a real rest with
+ * a real reason to be timed. The step stays in the list, keeps its place in the
+ * estimate, and is simply walked past; worked time is measured from the clock
+ * either way, so the record stays honest about what actually happened.
  */
-const isAncillary = (s: Step): boolean => s.block !== 'Main';
-
-/**
- * The stretch of steps the current screen stands for: one step in the Main
- * block, or a whole contiguous ancillary block. `stepIndex` always points at
- * the start of one of these, so Next and Previous move a screen at a time
- * rather than stranding him halfway inside a checklist he cannot see.
- */
-function unitRange(steps: Step[], index: number): { start: number; end: number } {
-  const step = steps[index];
-  if (step === undefined || !isAncillary(step)) return { start: index, end: index };
-
-  let start = index;
-  while (start > 0 && steps[start - 1].block === step.block) start -= 1;
-  let end = index;
-  while (end < steps.length - 1 && steps[end + 1].block === step.block) end += 1;
-  return { start, end };
-}
+const shownIndices = (steps: Step[]): number[] =>
+  steps.reduce<number[]>((acc, s, i) => {
+    if (s.kind === 'work' || s.block === 'Main') acc.push(i);
+    return acc;
+  }, []);
 
 /**
  * The work step the header speaks for.
@@ -137,10 +136,20 @@ export function WorkoutRunner() {
 
   const state = isActiveHydrated(active) ? active : null;
   const steps = state?.workout.steps ?? [];
-  const range = unitRange(steps, state?.stepIndex ?? 0);
-  const current: Step | undefined = steps[range.start];
-  const nextStep: Step | undefined = steps[range.end + 1];
-  const isLast = steps.length > 0 && range.end >= steps.length - 1;
+  const shown = shownIndices(steps);
+  /**
+   * Where he is in the list of screens, not in the list of steps.
+   *
+   * Clamped forward rather than snapped back: a stored position pointing at a
+   * skipped rest - an older session, or a build before those were skipped -
+   * resolves to the next real screen instead of a blank one. Nothing is written
+   * to fix it, because the first tap writes the corrected index anyway.
+   */
+  const at = Math.max(0, shown.findIndex((i) => i >= (state?.stepIndex ?? 0)));
+  const index = shown[at] ?? 0;
+  const current: Step | undefined = steps[index];
+  const nextStep: Step | undefined = steps[index + 1];
+  const isLast = shown.length > 0 && at >= shown.length - 1;
   const running = state !== null && !paused;
 
   /**
@@ -186,12 +195,11 @@ export function WorkoutRunner() {
       cued.current = null;
       advancedFrom.current = null;
       mutate((s) => {
-        const start = unitRange(s.workout.steps, target).start;
-        const step = s.workout.steps[start];
+        const step = s.workout.steps[target];
         if (step === undefined) return s;
         return {
           ...s,
-          stepIndex: start,
+          stepIndex: target,
           // Entering a rest stamps the deadline; entering anything else clears
           // it. One place, so a stale deadline cannot survive a step change.
           restEndsAt: step.kind === 'rest' ? nowMs() + step.seconds * 1000 : null,
@@ -248,17 +256,18 @@ export function WorkoutRunner() {
       go();
     }
 
-    if (!autoAdvance || advancedFrom.current === range.start) return;
-    advancedFrom.current = range.start;
-    goTo(range.start + 1);
-  }, [liveRemaining, autoAdvance, range.start, goTo, tickCue, go]);
+    if (!autoAdvance || advancedFrom.current === index) return;
+    advancedFrom.current = index;
+    goTo(index + 1);
+  }, [liveRemaining, autoAdvance, index, goTo, tickCue, go]);
 
   const onPrevious = (): void => {
     unlock();
     setPaused(false);
-    // Never disabled and never confirmed. At the very first step there is
+    // Never disabled and never confirmed. At the very first screen there is
     // simply nowhere behind to go.
-    if (range.start > 0) goTo(unitRange(steps, range.start - 1).start);
+    const back = shown[at - 1];
+    if (back !== undefined) goTo(back);
   };
 
 
@@ -301,16 +310,12 @@ export function WorkoutRunner() {
 
   /**
    * Everything that means "I am done with this screen" comes through here:
-   * Next, Skip rest, and the checklist's Done. It finishes the session when
-   * there is nothing after the current unit, rather than silently doing
-   * nothing.
+   * Next and Skip rest. It finishes the session when there is nothing after the
+   * current step, rather than silently doing nothing.
    *
-   * That no-op is what this replaces, and it was not a nicety. Every session
-   * ends on the cool-down checklist, so its Done button was dead on the last
-   * screen of every workout - he ticks six stretches, taps the obvious control
-   * and the app ignores him. The same dead shape sat on Skip rest for any
-   * workout ending on a rest, which is why the fix is here rather than a
-   * special case in the checklist.
+   * That no-op is what this replaces, and it was not a nicety. Routing the last
+   * screen's control to a Next that did nothing meant he taps the obvious
+   * control at the end of every session and the app ignores him.
    */
   const onAdvance = (): void => {
     unlock();
@@ -319,7 +324,7 @@ export function WorkoutRunner() {
       record(steps);
       return;
     }
-    goTo(range.end + 1);
+    goTo(shown[at + 1] ?? index);
   };
 
   const record = (done: Step[]): void => {
@@ -335,7 +340,7 @@ export function WorkoutRunner() {
   };
 
   /** A partial record, written BEFORE the session is cleared. */
-  const onEndHere = (): void => record(steps.slice(0, range.start));
+  const onEndHere = (): void => record(steps.slice(0, index));
 
   const onLeaveForNow = (): void => {
     mutate((s) => s);
@@ -360,12 +365,28 @@ export function WorkoutRunner() {
     );
   }
 
-  const round = roundLabel(steps, range.start);
-  // The checklist carries the block as its own heading, so repeating it in the
-  // header is just the same word twice - and "Move 1 of 3" is a lie about a
-  // block that is one screen, not three.
-  const checklist = isAncillary(current);
-  const move = checklist ? '' : movePosition(current);
+  const round = roundLabel(steps, index);
+  const move = movePosition(current);
+  /**
+   * One line, not three stacked ones.
+   *
+   * The header used to spend a block label, a round line and a move line on
+   * three separate rows - sixty-odd pixels of the phone given over to something
+   * he glances at between sets, taken from the picture he looks at during them.
+   * Run together with separators it says the same three things in the height of
+   * one.
+   */
+  const place = [current.block, round, move].filter(Boolean).join(' · ');
+  /**
+   * The stored reading, not the stored reading plus the unflushed fraction.
+   *
+   * The fraction lives in a ref, and a ref read during render is exactly what
+   * Next 16's ruleset rejects - rightly, since nothing re-renders when it
+   * changes. It costs nothing here: the interval flushes whole seconds into the
+   * store as they accrue, so this advances once a second on its own, which is
+   * the only resolution a `m:ss` reading has anyway.
+   */
+  const worked = Math.floor(state.workedSeconds);
 
   return (
     // `.read-far` reassigns --text-dim to full strength for everything below,
@@ -382,22 +403,14 @@ export function WorkoutRunner() {
        * two agree and the page itself never scrolls.
        */
       className="read-far mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-bottom))] w-full
-        max-w-md flex-col gap-4 px-4 py-5"
+        max-w-md flex-col gap-2 px-4 py-3"
       onPointerDown={unlock}
     >
-      <header className="flex shrink-0 flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-col gap-0.5">
-            {!checklist && (
-              <p className="text-sm font-bold uppercase tracking-widest text-[var(--text)]">
-                {current.block}
-              </p>
-            )}
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              {round && <p className="text-lg font-bold tracking-tight text-[var(--text)]">{round}</p>}
-              {move && <p className="text-base font-medium text-[var(--text)]">{move}</p>}
-            </div>
-          </div>
+      <header className="flex shrink-0 flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 text-sm font-bold uppercase tracking-wide text-[var(--text)]">
+            {place}
+          </p>
 
           {/*
             Exit stays up here, where a mis-tap is least likely, and that is the
@@ -410,7 +423,7 @@ export function WorkoutRunner() {
           */}
           <details className="relative shrink-0">
             <summary className="tap-target inline-flex cursor-pointer list-none items-center justify-center
-              rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-2)] px-5 py-2.5
+              rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2
               text-base font-bold text-[var(--text)]">
               Exit
             </summary>
@@ -430,47 +443,40 @@ export function WorkoutRunner() {
           </details>
         </div>
 
-        <ProgressBar value={range.start} max={steps.length} label="Workout progress" />
+        <ProgressBar value={at} max={shown.length} label="Workout progress" />
       </header>
 
       {/*
         The one scrolling region on the screen, bounded above by the header and
-        below by the controls. The checklist fills it and scrolls its own list,
-        so its Done button is always on screen; a hero card is centred when it
-        fits and scrolls when it does not.
+        below by the controls. An exercise card fills it exactly and does not
+        scroll; it only overflows once he has opened a set of cues himself. A
+        rest is centred in it, because a countdown wants the middle of the
+        screen and has nothing to fill it with.
       */}
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {checklist ? (
-          <AncillaryChecklist
-            steps={steps.slice(range.start, range.end + 1)}
-            exercises={BY_ID}
-            onDone={onAdvance}
-          />
-        ) : (
+        {current.kind === 'rest' ? (
           // `my-auto` rather than `justify-center`: a centred flex child that
           // overflows its scroll container cannot be scrolled back up to.
           <div className="my-auto">
-            {current.kind === 'rest' ? (
-              <RestCard
-                remainingSeconds={shownRemaining ?? current.seconds}
-                nextName={current.nextName}
-                onSkip={onAdvance}
-                onAddTime={onAddTime}
-              />
-            ) : (
-              <ExerciseCard step={current} exercise={BY_ID.get(current.exerciseId) ?? null} />
-            )}
+            <RestCard
+              remainingSeconds={shownRemaining ?? current.seconds}
+              nextName={current.nextName}
+              onSkip={onAdvance}
+              onAddTime={onAddTime}
+            />
           </div>
+        ) : (
+          <ExerciseCard step={current} exercise={BY_ID.get(current.exerciseId) ?? null} />
         )}
       </main>
 
       {/*
         A flex sibling of the scrolling region rather than a sticky overlay.
         Sticky kept the controls on screen but floated them OVER the card, and
-        the checklist's Done button ended up half behind the bar - a control
-        that looks broken, sitting next to one that was. Nothing can be behind
-        this now: the screen is exactly the height of the phone and only the
-        middle scrolls. `.app-shell` already holds the body clear of the home
+        a card's own footer ended up half behind the bar - a control that looks
+        broken, sitting next to one that was. Nothing can be behind this now:
+        the screen is exactly the height of the phone and only the middle
+        scrolls. `.app-shell` already holds the body clear of the home
         indicator, so this needs no inset of its own.
 
         Pause sits here beside Next because that is where his thumb already is;
@@ -478,14 +484,24 @@ export function WorkoutRunner() {
         in the header, where a mis-tap is least likely, and that is exactly why
         it stayed there.
       */}
-      <div className="-mx-4 flex shrink-0 flex-col gap-3 border-t border-[var(--border)]
-        bg-[var(--bg)] px-4 pb-1 pt-3">
-        <div role="status" className="min-h-6">
-          {paused && (
-            <p className="text-center text-base font-bold uppercase tracking-widest text-[var(--accent)]">
-              Paused
-            </p>
-          )}
+      <div className="-mx-4 flex shrink-0 flex-col gap-2 border-t border-[var(--border)]
+        bg-[var(--bg)] px-4 pb-1 pt-2">
+        {/*
+          The worked clock, right above the button that stops it.
+
+          It is the answer to a Pause that looked broken: on a work step nothing
+          on screen moved, so stopping it looked like nothing happening either.
+          A live region rather than a plain line, so the change of state is
+          announced once rather than every second - `aria-live` on a number that
+          ticks would read the whole session out loud.
+        */}
+        <div className="flex items-baseline justify-center gap-2 text-base font-bold uppercase tracking-widest">
+          <span className={paused ? 'text-[var(--accent)]' : 'text-[var(--text)]'} role="status">
+            {paused ? 'Paused' : 'Worked'}
+          </span>
+          <span className={`tabular-nums ${paused ? 'text-[var(--accent)]' : 'text-[var(--text)]'}`}>
+            {mmss(worked)}
+          </span>
         </div>
 
         <Button variant="ghost" onClick={onPrevious}>
